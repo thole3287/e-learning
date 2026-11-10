@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+vendor/
+backend/vendor/
+frontend/node_modules/
+
+# Environment and sensitive configuration files
+.env
+.env.backup
+.env.production
+backend/.env
+backend/.env.backup
+backend/.env.production
+frontend/.env.local
+frontend/.env.production
+
+# Build artifacts & Archives
+frontend/dist/
+frontend/dist-ssr/
+backend/public/build/
+*.zip
+*.tar
+*.gz
+
+# Database local dumps
+*.sqlite
+*.sql
+database.sql
+
+# Laravel Storage & Logs
+backend/storage/*.key
+backend/storage/logs/*.log
+backend/storage/framework/cache/data/*
+backend/storage/framework/sessions/*
+backend/storage/framework/views/*
+backend/public/storage
+*.log
+
+# Caches & Test Results
+.phpunit.result.cache
+.phpunit.cache/
+
+# OS & Editor files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
