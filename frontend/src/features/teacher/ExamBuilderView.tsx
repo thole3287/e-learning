@@ -70,6 +70,8 @@ export const ExamBuilderView: React.FC = () => {
   const [quickSaveToBank, setQuickSaveToBank] = useState(true);
   const [quickAssignClassIds, setQuickAssignClassIds] = useState<number[]>([]);
   const [isSubmittingQuickExam, setIsSubmittingQuickExam] = useState(false);
+  const [quickInputMode, setQuickInputMode] = useState<'file' | 'text'>('file');
+  const [quickRawText, setQuickRawText] = useState('');
 
   // Offline Shuffling & Word Export Modal
   const [showOfflineModal, setShowOfflineModal] = useState<Exam | null>(null);
@@ -467,6 +469,40 @@ export const ExamBuilderView: React.FC = () => {
     } finally {
       setQuickWordParsing(false);
     }
+  };
+
+  // Xử lý khi giáo viên dán trực tiếp văn bản đề thi
+  const handleQuickTextChange = (text: string) => {
+    setQuickRawText(text);
+    if (!text.trim()) {
+      setParsedExam(null);
+      return;
+    }
+    const parsed = parseExamText(text);
+    setParsedExam(parsed);
+
+    if (parsed.title && parsed.title !== 'Đề thi từ file Word') {
+      setQuickExamTitle(parsed.title);
+    }
+    if (parsed.duration_minutes) {
+      setQuickDuration(parsed.duration_minutes);
+    }
+    if (parsed.school_name) {
+      setOfflineConfig((prev) => ({
+        ...prev,
+        school_name: parsed.school_name || prev.school_name,
+        department_name: parsed.department_name || prev.department_name,
+      }));
+    }
+
+    setSubExamPicks({
+      part1Count: Math.min(parsed.groups.part1.length, 18),
+      part1Points: 4,
+      part2Count: Math.min(parsed.groups.part2.length, 4),
+      part2Points: 4,
+      part3Count: Math.min(parsed.groups.part3.length, 6),
+      part3Points: 2,
+    });
   };
 
   // Submit tạo đề thi nhanh từ file Word (kèm đề con & tự lưu ngân hàng)
@@ -2076,6 +2112,8 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                 onClick={() => {
                   setShowQuickWordModal(false);
                   setParsedExam(null);
+                  setQuickRawText('');
+                  setQuickInputMode('file');
                 }}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
               >
@@ -2084,33 +2122,74 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
             </div>
 
             <form onSubmit={handleQuickWordSubmit} className="space-y-4 text-xs">
-              {/* KHU VỰC TẢI FILE WORD */}
-              <div className="border-2 border-dashed border-slate-200 hover:border-emerald-500 rounded-2xl p-6 text-center transition-all bg-slate-50/50">
-                <input
-                  type="file"
-                  id="quickWordInput"
-                  accept=".docx"
-                  onChange={handleWordFileChange}
-                  className="hidden"
-                />
-                <label
-                  htmlFor="quickWordInput"
-                  className="cursor-pointer flex flex-col items-center justify-center space-y-2"
+              {/* CHỌN CÁCH NHẬP: TẢI FILE HOẶC DÁN VĂN BẢN */}
+              <div className="flex p-1 bg-slate-100 rounded-xl gap-1">
+                <button
+                  type="button"
+                  onClick={() => setQuickInputMode('file')}
+                  className={`flex-1 py-1.5 rounded-lg font-semibold transition-all ${
+                    quickInputMode === 'file'
+                      ? 'bg-white text-emerald-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
-                    <UploadCloud className="w-6 h-6" />
-                  </div>
-                  <div className="text-xs">
-                    <span className="font-semibold text-emerald-700 hover:underline">
-                      {quickWordParsing ? 'Đang đọc và bóc tách câu hỏi...' : 'Bấm để chọn file Word (.docx)'}
-                    </span>
-                    <span className="text-slate-500"> hoặc kéo thả vào đây</span>
-                  </div>
-                  <p className="text-[11px] text-slate-400">
-                    Hỗ trợ file Word chuẩn GDPT: Phần I (A,B,C,D), Phần II (Đúng/Sai a,b,c,d), Phần III (Trả lời ngắn)
-                  </p>
-                </label>
+                  📁 Tải File Word (.docx)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickInputMode('text')}
+                  className={`flex-1 py-1.5 rounded-lg font-semibold transition-all ${
+                    quickInputMode === 'text'
+                      ? 'bg-white text-emerald-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  📝 Dán Văn Bản Đề Thi Trực Tiếp
+                </button>
               </div>
+
+              {/* KHU VỰC TẢI FILE WORD HOẶC DÁN VĂN BẢN */}
+              {quickInputMode === 'file' ? (
+                <div className="border-2 border-dashed border-slate-200 hover:border-emerald-500 rounded-2xl p-6 text-center transition-all bg-slate-50/50">
+                  <input
+                    type="file"
+                    id="quickWordInput"
+                    accept=".docx"
+                    onChange={handleWordFileChange}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="quickWordInput"
+                    className="cursor-pointer flex flex-col items-center justify-center space-y-2"
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
+                      <UploadCloud className="w-6 h-6" />
+                    </div>
+                    <div className="text-xs">
+                      <span className="font-semibold text-emerald-700 hover:underline">
+                        {quickWordParsing ? 'Đang đọc và bóc tách câu hỏi...' : 'Bấm để chọn file Word (.docx)'}
+                      </span>
+                      <span className="text-slate-500"> hoặc kéo thả vào đây</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Hỗ trợ file Word chuẩn GDPT: Phần I (A,B,C,D), Phần II (Đúng/Sai a,b,c,d), Phần III (Trả lời ngắn)
+                    </p>
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <textarea
+                    rows={8}
+                    value={quickRawText}
+                    onChange={(e) => handleQuickTextChange(e.target.value)}
+                    placeholder="Dán toàn bộ nội dung đề thi vào đây (hỗ trợ đề thi đầy đủ Phần I, II, III, đánh dấu *A, *B, *a, Đáp án: ...)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-mono text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all resize-y"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    💡 Bạn có thể dán trực tiếp đề thi từ Word, Website hoặc ChatGPT vào đây, hệ thống sẽ tự động bóc tách ngay lập tức.
+                  </p>
+                </div>
+              )}
 
               {parsedExam && (
                 <div className="space-y-4">

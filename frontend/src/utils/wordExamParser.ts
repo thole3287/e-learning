@@ -46,22 +46,31 @@ export const parseExamText = (rawText: string, defaultDiff = 1): ParsedExamResul
   let gradeName = '';
   let subjectName = '';
 
-  const schoolMatch = cleanText.match(/(?:TRƯỜNG\s+THPT[^\n\r\|<]+)/i);
+  const headerBoundary = cleanText.search(/(?:PHẦN\s*(?:[I|V|X]+|\d+)[\.:\s]|(?:^|[\n\r])\s*Câu\s*1[\.:])/i);
+  const headerText = headerBoundary !== -1 ? cleanText.substring(0, headerBoundary) : cleanText.substring(0, 500);
+
+  const schoolMatch = headerText.match(/(?:TRƯỜNG\s+[^\n\r\|<]+)/i);
   if (schoolMatch) schoolName = schoolMatch[0].trim();
 
-  const deptMatch = cleanText.match(/(?:TỔ\s+[A-ZÀ-Ỹ\s]+)/i);
+  const deptMatch = headerText.match(/(?:TỔ\s+[A-ZÀ-Ỹ\s]+)/i);
   if (deptMatch) deptName = deptMatch[0].trim();
 
-  const titleMatch = cleanText.match(/(?:(?:KỲ\s*KIỂM\s*TRA|ĐỀ\s*KIỂM\s*TRA)[^\n\r\|<]+)/i);
-  if (titleMatch) extractedTitle = titleMatch[0].trim();
+  const titleMatch = headerText.match(/(?:(?:KỲ\s*KIỂM\s*TRA|ĐỀ\s*KIỂM\s*TRA|BÀI\s*KIỂM\s*TRA|KIỂM\s*TRA)[^\n\r\|<]+)/i);
+  if (titleMatch) {
+    extractedTitle = titleMatch[0]
+      .replace(/Thời\s*gian.*$/i, '')
+      .replace(/[-–_\s]+$/, '')
+      .trim();
+  }
 
-  const durationMatch = cleanText.match(/Thời\s*gian(?:\s*làm\s*bài)?:\s*(\d+)\s*phút/i);
+  const durationMatch = headerText.match(/Thời\s*gian(?:\s*làm\s*bài)?:\s*(\d+)\s*phút/i);
   if (durationMatch) durationMinutes = parseInt(durationMatch[1], 10);
 
-  const gradeMatch = cleanText.match(/KHỐI\s*(\d+)/i);
+  const gradeMatch = headerText.match(/(?:KHỐI|LỚP)\s*(10|11|12)\b/i) || headerText.match(/\b(10|11|12)\b/);
   if (gradeMatch) gradeName = `Khối ${gradeMatch[1]}`;
 
-  const subjectMatch = cleanText.match(/(?:MÔN|Môn)\s*([A-ZÀ-Ỹa-zà-ỹ\s]+?)(?=\s*(?:KHỐI|Thời gian|\n|\r|$))/i);
+  const subjectMatch = headerText.match(/(?:MÔN|Môn)\s*([A-ZÀ-Ỹa-zà-ỹ\s]+?)(?=\s*(?:KHỐI|Thời gian|\n|\r|$))/i)
+    || headerText.match(/(HÓA HỌC|TOÁN HỌC|TOÁN|VẬT LÝ|VẬT LÍ|SINH HỌC|LỊCH SỬ|ĐỊA LÝ|ĐỊA LÍ|GDCD|TIẾNG ANH|TIN HỌC|NGỮ VĂN)/i);
   if (subjectMatch) subjectName = subjectMatch[1].trim();
 
   // 2. Tách phần HƯỚNG DẪN CHẤM / BẢNG ĐÁP ÁN ở cuối file
