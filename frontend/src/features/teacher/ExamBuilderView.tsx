@@ -75,9 +75,11 @@ export const ExamBuilderView: React.FC = () => {
   const [showOfflineModal, setShowOfflineModal] = useState<Exam | null>(null);
   const [offlineConfig, setOfflineConfig] = useState({
     num_codes: 4,
-    start_code: 101,
-    school_name: 'TRƯỜNG THPT CHUYÊN CHU VĂN AN',
-    department_name: 'TỔ CHUYÊN MÔN HÓA HỌC',
+    start_code: 1,
+    school_name: 'TRƯỜNG THPT HẬU NGHĨA',
+    department_name: 'TỔ HÓA HỌC',
+    city_name: 'Hậu Nghĩa',
+    teacher_name: 'Lê Trọng Đức',
     shuffle_questions: true,
     shuffle_options: true,
   });
@@ -432,8 +434,24 @@ export const ExamBuilderView: React.FC = () => {
       const parsed = parseExamText(rawText);
       setParsedExam(parsed);
 
-      const titleWithoutExt = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-      setQuickExamTitle(titleWithoutExt);
+      if (parsed.title && parsed.title !== 'Đề thi từ file Word') {
+        setQuickExamTitle(parsed.title);
+      } else {
+        const titleWithoutExt = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+        setQuickExamTitle(titleWithoutExt);
+      }
+
+      if (parsed.duration_minutes) {
+        setQuickDuration(parsed.duration_minutes);
+      }
+
+      if (parsed.school_name) {
+        setOfflineConfig((prev) => ({
+          ...prev,
+          school_name: parsed.school_name || prev.school_name,
+          department_name: parsed.department_name || prev.department_name,
+        }));
+      }
 
       // Cài đặt số câu cho đề con (như Azota)
       setSubExamPicks({
@@ -599,8 +617,8 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
     setShowOfflineModal(exam);
     setOfflineConfig((prev) => ({
       ...prev,
-      school_name: 'TRƯỜNG THPT CHUYÊN CHU VĂN AN',
-      department_name: `TỔ CHUYÊN MÔN ${exam.subject?.name?.toUpperCase() || 'HÓA HỌC'}`,
+      school_name: prev.school_name || 'TRƯỜNG THPT HẬU NGHĨA',
+      department_name: prev.department_name || `TỔ ${exam.subject?.name?.toUpperCase() || 'HÓA HỌC'}`,
     }));
     setOfflinePreviewData(null);
   };
@@ -618,6 +636,8 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
           ...res.data,
           school_name: offlineConfig.school_name,
           department_name: offlineConfig.department_name,
+          city_name: offlineConfig.city_name,
+          teacher_name: offlineConfig.teacher_name,
         };
         const blob = await generateExamDocx(fullData);
         downloadBlob(blob, `De_Thi_${showOfflineModal.code}_${offlineConfig.num_codes}_MaDe.docx`);
@@ -2429,6 +2449,29 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Giáo viên ra đề (Ký tên)</label>
+                  <input
+                    type="text"
+                    value={offlineConfig.teacher_name}
+                    onChange={(e) => setOfflineConfig({ ...offlineConfig, teacher_name: e.target.value })}
+                    placeholder="VD: Lê Trọng Đức"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Địa phương / Địa danh</label>
+                  <input
+                    type="text"
+                    value={offlineConfig.city_name}
+                    onChange={(e) => setOfflineConfig({ ...offlineConfig, city_name: e.target.value })}
+                    placeholder="VD: Hậu Nghĩa"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
               {/* CHỌN SỐ LƯỢNG MÃ ĐỀ */}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1.5">Số lượng mã đề cần đảo</label>
@@ -2500,7 +2543,7 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
-                        {offlinePreviewData.answer_matrix.rows.map((row) => (
+                        {(offlinePreviewData.answer_matrix.rows || []).map((row) => (
                           <tr key={row.code} className="hover:bg-slate-800/50">
                             <td className="py-1 px-2 font-bold text-indigo-400">{row.code}</td>
                             {Array.from({ length: offlinePreviewData.answer_matrix.total_questions }).map((_, i) => (

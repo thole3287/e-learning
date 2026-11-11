@@ -510,7 +510,8 @@ class ExamController extends Controller
         $tfLabels = ['a', 'b', 'c', 'd'];
 
         for ($i = 0; $i < $numCodes; $i++) {
-            $code = (string)($startCode + $i);
+            $codeNum = $startCode + $i;
+            $code = $codeNum < 100 ? str_pad($codeNum, 3, '0', STR_PAD_LEFT) : (string)$codeNum;
             
             // Xử lý từng phần
             $shuffledParts = [];
@@ -524,6 +525,7 @@ class ExamController extends Controller
                 }
 
                 $processed = [];
+                $partQNum = 1;
                 foreach ($items as $item) {
                     $opts = $item['options'];
                     if ($shuffleOptions && count($opts) > 1 && !$isTF) {
@@ -539,7 +541,7 @@ class ExamController extends Controller
                         $formattedOpts[] = [
                             'label' => $label,
                             'content' => $opt['content'],
-                            'is_correct' => $opt['is_correct'],
+                            'is_correct' => (bool)$opt['is_correct'],
                         ];
 
                         if ($isTF) {
@@ -564,7 +566,8 @@ class ExamController extends Controller
                     $answerKey[$globalQNum] = $correctAnswer;
 
                     $processed[] = [
-                        'question_number' => $globalQNum,
+                        'question_number' => $partQNum,
+                        'global_number' => $globalQNum,
                         'original_id' => $item['id'],
                         'content' => $item['content'],
                         'question_type' => $item['question_type'],
@@ -575,29 +578,30 @@ class ExamController extends Controller
                     ];
 
                     $globalQNum++;
+                    $partQNum++;
                 }
 
                 return $processed;
             };
 
             $shuffledParts['part1'] = [
-                'title' => 'PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn (Thí sinh chọn 01 phương án đúng)',
+                'title' => 'PHẦN I. Câu trắc nghiệm nhiều phương án lựa chọn. (Thí sinh chọn 01 phương án đúng)',
                 'questions' => $processPart($categorized['part1']),
             ];
 
             $shuffledParts['part2'] = [
-                'title' => 'PHẦN II. Câu trắc nghiệm Đúng/Sai (Thí sinh trả lời Đúng hoặc Sai cho mỗi ý a, b, c, d)',
+                'title' => 'PHẦN II. Câu trắc nghiệm đúng sai. (Thí sinh chọn Đúng hoặc Sai cho mỗi ý a, b, c, d)',
                 'questions' => $processPart($categorized['part2'], true),
             ];
 
             $shuffledParts['part3'] = [
-                'title' => 'PHẦN III. Câu trắc nghiệm trả lời ngắn (Thí sinh điền kết quả vào ô trả lời)',
+                'title' => 'PHẦN III. Câu trắc nghiệm trả lời ngắn. (Thí sinh điền kết quả vào ô trả lời)',
                 'questions' => $processPart($categorized['part3']),
             ];
 
             if (!empty($categorized['part4'])) {
                 $shuffledParts['part4'] = [
-                    'title' => 'PHẦN IV. Tự luận',
+                    'title' => 'PHẦN IV. Tự luận.',
                     'questions' => $processPart($categorized['part4']),
                 ];
             }
@@ -609,7 +613,69 @@ class ExamController extends Controller
             ];
         }
 
-        // Tạo bảng ma trận đáp án tổng hợp (Answer Matrix)
+        // Tạo bảng ma trận đáp án 4 phần theo chuẩn Bộ GD&ĐT
+        // 1. Phần 1 Matrix
+        $part1Matrix = [];
+        $p1Count = count($categorized['part1']);
+        for ($qIdx = 1; $qIdx <= $p1Count; $qIdx++) {
+            $rowAnswers = [];
+            foreach ($variants as $v) {
+                $qItem = $v['parts']['part1']['questions'][$qIdx - 1] ?? null;
+                $rowAnswers[$v['code']] = $qItem['correct_answer'] ?? '-';
+            }
+            $part1Matrix[] = [
+                'question_number' => $qIdx,
+                'answers' => $rowAnswers,
+            ];
+        }
+
+        // 2. Phần 2 Matrix (Lệnh hỏi a, b, c, d)
+        $part2Matrix = [];
+        $p2Count = count($categorized['part2']);
+        for ($qIdx = 1; $qIdx <= $p2Count; $qIdx++) {
+            foreach ($tfLabels as $optIdx => $label) {
+                $rowAnswers = [];
+                foreach ($variants as $v) {
+                    $qItem = $v['parts']['part2']['questions'][$qIdx - 1] ?? null;
+                    $opt = $qItem['options'][$optIdx] ?? null;
+                    $rowAnswers[$v['code']] = ($opt && $opt['is_correct']) ? 'Đ' : 'S';
+                }
+                $part2Matrix[] = [
+                    'question_number' => $qIdx,
+                    'sub_label' => $label,
+                    'answers' => $rowAnswers,
+                ];
+            }
+        }
+
+        // 3. Phần 3 Matrix
+        $part3Matrix = [];
+        $p3Count = count($categorized['part3']);
+        for ($qIdx = 1; $qIdx <= $p3Count; $qIdx++) {
+            $rowAnswers = [];
+            foreach ($variants as $v) {
+                $qItem = $v['parts']['part3']['questions'][$qIdx - 1] ?? null;
+                $rowAnswers[$v['code']] = $qItem['correct_answer'] ?? '-';
+            }
+            $part3Matrix[] = [
+                'question_number' => $qIdx,
+                'answers' => $rowAnswers,
+            ];
+        }
+
+        // 4. Phần 4 Matrix (Tự luận)
+        $part4Matrix = [];
+        $p4Count = count($categorized['part4']);
+        for ($qIdx = 1; $qIdx <= $p4Count; $qIdx++) {
+            $qItem = $categorized['part4'][$qIdx - 1] ?? null;
+            $part4Matrix[] = [
+                'question_number' => $qIdx,
+                'content' => $qItem['explanation'] ?: ($qItem['content'] ?? 'Theo hướng dẫn chấm'),
+                'points' => $qItem['points'] ?? 1.0,
+            ];
+        }
+
+        // Bảng ma trận tổng hợp phẳng cũ (cho backward compatibility)
         $totalQuestionsCount = count($rawQuestions);
         $matrixRows = [];
         foreach ($variants as $v) {
@@ -631,6 +697,10 @@ class ExamController extends Controller
                 'answer_matrix' => [
                     'total_questions' => $totalQuestionsCount,
                     'rows' => $matrixRows,
+                    'part1' => $part1Matrix,
+                    'part2' => $part2Matrix,
+                    'part3' => $part3Matrix,
+                    'part4' => $part4Matrix,
                 ],
             ],
         ]);

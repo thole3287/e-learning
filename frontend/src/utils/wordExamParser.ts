@@ -3,6 +3,7 @@ export interface ParsedQuestion {
   question_type: 'single_choice' | 'multiple_choice' | 'true_false' | 'fill_in_blank' | 'short_answer';
   difficulty_level: number;
   explanation?: string;
+  points?: number;
   options: Array<{
     content: string;
     is_correct: boolean;
@@ -12,6 +13,11 @@ export interface ParsedQuestion {
 
 export interface ParsedExamResult {
   title: string;
+  school_name?: string;
+  department_name?: string;
+  duration_minutes?: number;
+  grade_name?: string;
+  subject_name?: string;
   questions: ParsedQuestion[];
   groups: {
     part1: ParsedQuestion[]; // Nhiều lựa chọn (A, B, C, D)
@@ -25,28 +31,123 @@ export interface ParsedExamResult {
 export const parseExamText = (rawText: string, defaultDiff = 1): ParsedExamResult => {
   const result: ParsedQuestion[] = [];
 
-  // Chuẩn hóa dòng và ngắt dòng
+  // Chuẩn hóa dòng và khoảng trắng
   const cleanText = rawText
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(/\u00A0/g, ' ')
     .trim();
 
-  // Tách các phần lớn nếu có (PHẦN I, PHẦN II, PHẦN III, PHẦN IV...)
-  const partSplitRegex = /(?=PHẦN\s*(?:[I|V|X]+|\d+)[\.:\s])/gi;
-  const rawParts = cleanText.split(partSplitRegex);
+  // 1. Trích xuất metadata từ phần đầu đề thi nếu có (Trường, Tổ, Kỳ kiểm tra, Môn, Thời gian)
+  let extractedTitle = 'Đề thi từ file Word';
+  let schoolName = '';
+  let deptName = '';
+  let durationMinutes = 45;
+  let gradeName = '';
+  let subjectName = '';
 
-  // Đọc bảng đáp án tổng hợp ở cuối đề nếu có (ví dụ: 1.A 2.B 3.C... hoặc 1-A 2-C...)
-  const endTableKeyMatch = cleanText.match(/(?:BẢNG\s*ĐÁP\s*ÁN|ĐÁP\s*ÁN\s*CÁC\s*CÂU)[\s\S]*$/i);
-  const globalAnswerMap: Record<number, string> = {};
-  if (endTableKeyMatch) {
-    const tableText = endTableKeyMatch[0];
-    const pairRegex = /(\d+)[\.\s\:\-]+([A-D]|Đ|S|\d+)/gi;
-    let pm;
-    while ((pm = pairRegex.exec(tableText)) !== null) {
-      globalAnswerMap[parseInt(pm[1], 10)] = pm[2].toUpperCase();
+  const schoolMatch = cleanText.match(/(?:TRƯỜNG\s+THPT[^\n\r\|<]+)/i);
+  if (schoolMatch) schoolName = schoolMatch[0].trim();
+
+  const deptMatch = cleanText.match(/(?:TỔ\s+[A-ZÀ-Ỹ\s]+)/i);
+  if (deptMatch) deptName = deptMatch[0].trim();
+
+  const titleMatch = cleanText.match(/(?:(?:KỲ\s*KIỂM\s*TRA|ĐỀ\s*KIỂM\s*TRA)[^\n\r\|<]+)/i);
+  if (titleMatch) extractedTitle = titleMatch[0].trim();
+
+  const durationMatch = cleanText.match(/Thời\s*gian(?:\s*làm\s*bài)?:\s*(\d+)\s*phút/i);
+  if (durationMatch) durationMinutes = parseInt(durationMatch[1], 10);
+
+  const gradeMatch = cleanText.match(/KHỐI\s*(\d+)/i);
+  if (gradeMatch) gradeName = `Khối ${gradeMatch[1]}`;
+
+  const subjectMatch = cleanText.match(/(?:MÔN|Môn)\s*([A-ZÀ-Ỹa-zà-ỹ\s]+?)(?=\s*(?:KHỐI|Thời gian|\n|\r|$))/i);
+  if (subjectMatch) subjectName = subjectMatch[1].trim();
+
+  // 2. Tách phần HƯỚNG DẪN CHẤM / BẢNG ĐÁP ÁN ở cuối file
+  let questionText = cleanText;
+  let guideText = '';
+  const guideSplitMatch = cleanText.search(/(?:HƯỚNG\s*DẪN\s*CHẤM|ĐÁP\s*ÁN\s*CHI\s*TIẾT|BẢNG\s*ĐÁP\s*ÁN\s*CÁC\s*MÃ\s*ĐỀ)/i);
+  if (guideSplitMatch !== -1) {
+    questionText = cleanText.substring(0, guideSplitMatch);
+    guideText = cleanText.substring(guideSplitMatch);
+  }
+
+  // 3. Nếu file chứa nhiều mã đề (Mã đề 001, Mã đề 002...), chỉ lấy mã đề đầu tiên để tránh trùng lặp
+  const secondCodeMatch = questionText.search(/(?:Mã\s*đề\s*(?:002|02|102|003|004|B|C|D))/i);
+  if (secondCodeMatch !== -1) {
+    questionText = questionText.substring(0, secondCodeMatch);
+  }
+
+  // 4. Bóc tách ma trận đáp án từ HƯỚNG DẪN CHẤM
+  const p1AnswerMap: Record<number, string> = {};
+  const p2AnswerMap: Record<string, boolean> = {};
+  const p3AnswerMap: Record<number, string> = {};
+  const p4AnswerMap: Record<number, { explanation: string; points: number }> = {};
+
+  if (guideText) {
+    // 4.1. Phần 1: Trắc nghiệm 4 lựa chọn (A, B, C, D)
+    const p1Section = guideText.match(/(?:Phần\s*1|I\.\s*Phần)[\s\S]*?(?=(?:Phần\s*2|II\.\s*Phần|$))/i);
+    if (p1Section) {
+      const lines = p1Section[0].split('\n');
+      for (const line of lines) {
+        const match = line.match(/^\s*\|?\s*(\d+)\s*\|\s*([A-D])\b/i) || line.match(/^\s*(\d+)[\t\s]+([A-D])\b/i);
+        if (match) {
+          p1AnswerMap[parseInt(match[1], 10)] = match[2].toUpperCase();
+        }
+      }
+    }
+
+    // 4.2. Phần 2: Đúng / Sai (a, b, c, d)
+    const p2Section = guideText.match(/(?:Phần\s*2|II\.\s*Phần)[\s\S]*?(?=(?:Phần\s*3|III\.\s*Phần|$))/i);
+    if (p2Section) {
+      const lines = p2Section[0].split('\n');
+      let currentQ = 1;
+      for (const line of lines) {
+        const match = line.match(/^\s*\|?\s*(\d+)?\s*\|\s*([a-d])\s*\|\s*([^\s\|]+)/iu) 
+                   || line.match(/^\s*(?:(\d+)[\t\s]+)?([a-d])[\t\s]+([^\s\|]+)/iu);
+        if (match) {
+          if (match[1]) currentQ = parseInt(match[1], 10);
+          const sub = match[2].toLowerCase();
+          const valStr = match[3].trim().toUpperCase();
+          const isTrue = valStr === 'Đ' || valStr === 'D' || valStr === 'T' || valStr.startsWith('ĐÚNG') || valStr.startsWith('TRUE');
+          p2AnswerMap[`${currentQ}_${sub}`] = isTrue;
+        }
+      }
+    }
+
+    // 4.3. Phần 3: Trả lời ngắn
+    const p3Section = guideText.match(/(?:Phần\s*3|III\.\s*Phần)[\s\S]*?(?=(?:Phần\s*4|IV\.\s*Phần|$))/i);
+    if (p3Section) {
+      const lines = p3Section[0].split('\n');
+      for (const line of lines) {
+        const match = line.match(/^\s*\|?\s*(\d+)\s*\|\s*([^\|\n\r\t]+)/i) || line.match(/^\s*(\d+)[\t\s]+([^\n\r\t]+)/i);
+        if (match && !/^(?:Câu|Đáp án|Mã đề)/i.test(match[1])) {
+          p3AnswerMap[parseInt(match[1], 10)] = match[2].trim();
+        }
+      }
+    }
+
+    // 4.4. Phần 4: Tự luận
+    const p4Section = guideText.match(/(?:Phần\s*4|IV\.\s*Phần)[\s\S]*?$/i);
+    if (p4Section) {
+      const lines = p4Section[0].split('\n');
+      for (const line of lines) {
+        const match = line.match(/^\s*\|?\s*(\d+)\s*\|\s*([^\|]+)\|\s*([^\|\n\r]+)/i);
+        if (match) {
+          const qNum = parseInt(match[1], 10);
+          p4AnswerMap[qNum] = {
+            explanation: match[2].trim(),
+            points: parseFloat(match[3].replace(',', '.')) || 1.0,
+          };
+        }
+      }
     }
   }
+
+  // 5. Tách các phần lớn (PHẦN I, PHẦN II, PHẦN III, PHẦN IV...)
+  const partSplitRegex = /(?=PHẦN\s*(?:[I|V|X]+|\d+)[\.:\s])/gi;
+  const rawParts = questionText.split(partSplitRegex);
 
   let questionGlobalIndex = 1;
 
@@ -55,9 +156,9 @@ export const parseExamText = (rawText: string, defaultDiff = 1): ParsedExamResul
     const isExplicitPart3 = /PHẦN\s*(?:III\b|3\b|TRẢ\s*LỜI\s*NGẮN|ĐIỀN\s*SỐ)/i.test(part);
     const isExplicitPart4 = /PHẦN\s*(?:IV\b|4\b|TỰ\s*LUẬN)/i.test(part);
 
-    // Tách các khối câu hỏi
+    // Tách các khối câu hỏi trong từng phần
     const qBlocks = part
-      .split(/(?=(?:Câu|Bài)\s*\d+[\.:])/i)
+      .split(/(?=(?:^|[\n\r])\s*(?:Câu|Bài)\s*\d+[\.:])/i)
       .map((b) => b.trim())
       .filter((b) => /^(?:Câu|Bài)\s*\d+[\.:]/i.test(b));
 
@@ -115,7 +216,7 @@ export const parseExamText = (rawText: string, defaultDiff = 1): ParsedExamResul
       const isEssay = isExplicitPart4 || (!hasABCD && !hasSubItems && !hasShortAnswer && !isFillInBlank);
 
       if (isFillInBlank) {
-        // === CÂU TRẢ LỜI NGẮN / ĐIỀN SỐ ===
+        // === CÂU TRẢ LỜI NGẮN / ĐIỀN SỐ (PHẦN III) ===
         const explMatch = qBlock.match(/(?:Lời\s*giải|Giải\s*thích|Explanation):?([\s\S]*?)(?:Đáp\s*án|$)/i);
 
         let content = qBlock
@@ -125,7 +226,8 @@ export const parseExamText = (rawText: string, defaultDiff = 1): ParsedExamResul
           .replace(/(?:Đáp\s*án(?:\s*đúng)?|Answer):[\s\S]*$/i, '')
           .trim();
 
-        const correctAns = ansMatch ? ansMatch[1].trim() : (globalAnswerMap[qNum] || '');
+        // Ưu tiên đáp án từ bảng hướng dẫn chấm ở cuối
+        const correctAns = p3AnswerMap[qNum] || (ansMatch ? ansMatch[1].trim() : '');
         const expl = explMatch ? explMatch[1].trim() : '';
 
         result.push({
@@ -139,7 +241,7 @@ export const parseExamText = (rawText: string, defaultDiff = 1): ParsedExamResul
           ],
         });
       } else if (isTrueFalse) {
-        // === CÂU ĐÚNG / SAI (a, b, c, d) ===
+        // === CÂU ĐÚNG / SAI (PHẦN II) ===
         let mainContent = '';
         const subItems: { letter: string; text: string; isCorrect: boolean }[] = [];
 
@@ -163,6 +265,12 @@ export const parseExamText = (rawText: string, defaultDiff = 1): ParsedExamResul
             } else if (/[\(\[]\s*(?:Sai|S|False|F)\s*[\)\]]$/i.test(raw)) {
               isCorrect = false;
               raw = raw.replace(/[\(\[]\s*(?:Sai|S|False|F)\s*[\)\]]$/i, '').trim();
+            }
+
+            // Kiểm tra bảng Hướng dẫn chấm nếu có
+            const guideKey = `${qNum}_${cur.letter}`;
+            if (p2AnswerMap[guideKey] !== undefined) {
+              isCorrect = p2AnswerMap[guideKey];
             }
 
             subItems.push({
@@ -189,19 +297,18 @@ export const parseExamText = (rawText: string, defaultDiff = 1): ParsedExamResul
           ],
         });
       } else if (hasABCD) {
-        // === CÂU TRẮC NGHIỆM 4 LỰA CHỌN (A, B, C, D) ===
+        // === CÂU TRẮC NGHIỆM 4 LỰA CHỌN (PHẦN I) ===
         const firstOptIndex = abcdIndices[0].tagIndex;
         let questionContent = blockWithoutHeader.substring(0, firstOptIndex).trim();
 
-        // Tách các phương án
-        const options: { content: string; is_correct: boolean }[] = [];
-        let detectedCorrectLetter = globalAnswerMap[qNum] || '';
-
-        // Kiểm tra xem cuối câu có "Đáp án: A" hay không
+        // Kiểm tra xem bảng Hướng dẫn chấm hoặc cuối câu có đáp án không
+        let detectedCorrectLetter = p1AnswerMap[qNum] || '';
         const endAns = qBlock.match(/(?:Đáp\s*án(?:\s*đúng)?|Answer):\s*([A-D])/i);
         if (endAns) {
           detectedCorrectLetter = endAns[1].toUpperCase();
         }
+
+        const options: { content: string; is_correct: boolean }[] = [];
 
         for (let i = 0; i < abcdIndices.length; i++) {
           const cur = abcdIndices[i];
@@ -239,13 +346,16 @@ export const parseExamText = (rawText: string, defaultDiff = 1): ParsedExamResul
           options,
         });
       } else {
-        // Tự luận hoặc dạng khác
+        // === TỰ LUẬN (PHẦN IV) ===
+        const p4Data = p4AnswerMap[qNum];
         result.push({
           content: blockWithoutHeader,
           question_type: 'short_answer',
           difficulty_level: diff,
+          explanation: p4Data ? p4Data.explanation : undefined,
+          points: p4Data ? p4Data.points : 1.0,
           group_type: 'part4',
-          options: [{ content: 'Đáp án tự luận', is_correct: true }],
+          options: [{ content: p4Data ? p4Data.explanation : 'Đáp án tự luận', is_correct: true }],
         });
       }
 
@@ -262,7 +372,12 @@ export const parseExamText = (rawText: string, defaultDiff = 1): ParsedExamResul
   };
 
   return {
-    title: 'Đề thi từ file Word',
+    title: extractedTitle,
+    school_name: schoolName,
+    department_name: deptName,
+    duration_minutes: durationMinutes,
+    grade_name: gradeName,
+    subject_name: subjectName,
     questions: result,
     groups,
     totalCount: result.length,
