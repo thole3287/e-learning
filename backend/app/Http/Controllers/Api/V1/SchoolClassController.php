@@ -109,12 +109,13 @@ class SchoolClassController extends Controller
                 'code' => $code,
             ]);
 
-            // Nếu giáo viên tạo, tự động gán vào TeacherClass
-            if ($user->isTeacher()) {
+            // Tự động gán giáo viên được chọn vào TeacherClass
+            $assignedTeacherId = $homeroomTeacherId ?? ($user->isTeacher() ? $user->id : null);
+            if ($assignedTeacherId) {
                 $defaultSubjectId = Subject::first()?->id;
                 if ($defaultSubjectId) {
                     TeacherClass::firstOrCreate([
-                        'teacher_id' => $user->id,
+                        'teacher_id' => $assignedTeacherId,
                         'class_id' => $newClass->id,
                         'subject_id' => $defaultSubjectId,
                     ]);
@@ -152,16 +153,28 @@ class SchoolClassController extends Controller
     {
         $validated = $request->validate([
             'homeroom_teacher_id' => 'nullable|exists:users,id',
+            'grade_id' => 'nullable|exists:grades,id',
             'name' => 'sometimes|string|max:100',
             'code' => 'sometimes|string|max:50',
         ]);
 
         $class->update($validated);
 
+        if (!empty($validated['homeroom_teacher_id'])) {
+            $defaultSubjectId = Subject::first()?->id;
+            if ($defaultSubjectId) {
+                TeacherClass::firstOrCreate([
+                    'teacher_id' => $validated['homeroom_teacher_id'],
+                    'class_id' => $class->id,
+                    'subject_id' => $defaultSubjectId,
+                ]);
+            }
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Cập nhật thông tin lớp học thành công',
-            'data' => $class->load(['grade', 'academicYear', 'homeroomTeacher']),
+            'data' => $class->load(['grade', 'academicYear', 'homeroomTeacher', 'students']),
         ]);
     }
 
