@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Exam, Question } from '../../types';
 import { MathRenderer } from '../../components/math/MathRenderer';
+import mammoth from 'mammoth';
+import { parseExamText, ParsedExamResult, ParsedQuestion } from '../../utils/wordExamParser';
+import { generateExamDocx, downloadBlob, OfflineExamData } from '../../utils/docxExport';
 import {
   Plus,
   BarChart2,
@@ -22,6 +25,13 @@ import {
   EyeOff,
   Printer,
   X,
+  UploadCloud,
+  Download,
+  Copy,
+  Check,
+  FileCheck,
+  Code,
+  GraduationCap,
 } from 'lucide-react';
 
 export const ExamBuilderView: React.FC = () => {
@@ -33,6 +43,48 @@ export const ExamBuilderView: React.FC = () => {
 
   // Modal States
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createModalTab, setCreateModalTab] = useState<'manual' | 'json'>('manual');
+  const [jsonExamText, setJsonExamText] = useState('');
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
+  const [isSubmittingJson, setIsSubmittingJson] = useState(false);
+
+  // Quick Word Exam & Sub-exam State
+  const [showQuickWordModal, setShowQuickWordModal] = useState(false);
+  const [quickWordParsing, setQuickWordParsing] = useState(false);
+  const [parsedExam, setParsedExam] = useState<ParsedExamResult | null>(null);
+  const [isSubExamMode, setIsSubExamMode] = useState(true);
+  const [subExamPicks, setSubExamPicks] = useState({
+    part1Count: 0,
+    part1Points: 4,
+    part2Count: 0,
+    part2Points: 4,
+    part3Count: 0,
+    part3Points: 2,
+  });
+  const [quickExamTitle, setQuickExamTitle] = useState('');
+  const [quickSubjectId, setQuickSubjectId] = useState(1);
+  const [quickGradeId, setQuickGradeId] = useState('');
+  const [quickDuration, setQuickDuration] = useState(40);
+  const [quickShuffleQuestions, setQuickShuffleQuestions] = useState(true);
+  const [quickShuffleOptions, setQuickShuffleOptions] = useState(true);
+  const [quickSaveToBank, setQuickSaveToBank] = useState(true);
+  const [quickAssignClassIds, setQuickAssignClassIds] = useState<number[]>([]);
+  const [isSubmittingQuickExam, setIsSubmittingQuickExam] = useState(false);
+
+  // Offline Shuffling & Word Export Modal
+  const [showOfflineModal, setShowOfflineModal] = useState<Exam | null>(null);
+  const [offlineConfig, setOfflineConfig] = useState({
+    num_codes: 4,
+    start_code: 101,
+    school_name: 'TRƯỜNG THPT CHUYÊN CHU VĂN AN',
+    department_name: 'TỔ CHUYÊN MÔN HÓA HỌC',
+    shuffle_questions: true,
+    shuffle_options: true,
+  });
+  const [isExportingDocx, setIsExportingDocx] = useState(false);
+  const [offlinePreviewData, setOfflinePreviewData] = useState<OfflineExamData | null>(null);
+  const [loadingOfflinePreview, setLoadingOfflinePreview] = useState(false);
+
   const [showAssignModal, setShowAssignModal] = useState<Exam | null>(null);
   const [previewExam, setPreviewExam] = useState<any | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -367,6 +419,234 @@ export const ExamBuilderView: React.FC = () => {
     }
   };
 
+  // Xử lý nạp file Word tạo đề & đề con
+  const handleWordFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setQuickWordParsing(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const res = await mammoth.extractRawText({ arrayBuffer });
+      const rawText = res.value;
+      const parsed = parseExamText(rawText);
+      setParsedExam(parsed);
+
+      const titleWithoutExt = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
+      setQuickExamTitle(titleWithoutExt);
+
+      // Cài đặt số câu cho đề con (như Azota)
+      setSubExamPicks({
+        part1Count: Math.min(parsed.groups.part1.length, 18),
+        part1Points: 4,
+        part2Count: Math.min(parsed.groups.part2.length, 4),
+        part2Points: 4,
+        part3Count: Math.min(parsed.groups.part3.length, 6),
+        part3Points: 2,
+      });
+    } catch (err: any) {
+      alert('Không thể đọc file Word: ' + err.message);
+    } finally {
+      setQuickWordParsing(false);
+    }
+  };
+
+  // Submit tạo đề thi nhanh từ file Word (kèm đề con & tự lưu ngân hàng)
+  const handleQuickWordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!parsedExam || parsedExam.questions.length === 0) {
+      alert('Chưa có câu hỏi nào được bóc tách từ file Word!');
+      return;
+    }
+    if (!quickExamTitle.trim()) {
+      alert('Vui lòng nhập tên đề thi!');
+      return;
+    }
+
+    let selectedQuestions: ParsedQuestion[] = [];
+    if (isSubExamMode) {
+      // Bốc ngẫu nhiên câu hỏi theo từng phần
+      const shuffleAndTake = (list: ParsedQuestion[], count: number, totalPoints: number) => {
+        const picked = [...list].sort(() => 0.5 - Math.random()).slice(0, count);
+        const ptsPerQ = picked.length > 0 ? Number((totalPoints / picked.length).toFixed(2)) : 1;
+        return picked.map((q) => ({ ...q, points: ptsPerQ }));
+      };
+
+      const p1 = shuffleAndTake(parsedExam.groups.part1, subExamPicks.part1Count, subExamPicks.part1Points);
+      const p2 = shuffleAndTake(parsedExam.groups.part2, subExamPicks.part2Count, subExamPicks.part2Points);
+      const p3 = shuffleAndTake(parsedExam.groups.part3, subExamPicks.part3Count, subExamPicks.part3Points);
+      selectedQuestions = [...p1, ...p2, ...p3];
+
+      if (selectedQuestions.length === 0) {
+        alert('Vui lòng chọn ít nhất 1 câu hỏi cho các nhóm trong đề con!');
+        return;
+      }
+    } else {
+      selectedQuestions = parsedExam.questions;
+    }
+
+    setIsSubmittingQuickExam(true);
+    try {
+      const payload: any = {
+        title: quickExamTitle.trim(),
+        subject_id: quickSubjectId,
+        grade_id: quickGradeId ? Number(quickGradeId) : null,
+        duration_minutes: quickDuration,
+        total_points: isSubExamMode
+          ? (subExamPicks.part1Points + subExamPicks.part2Points + subExamPicks.part3Points)
+          : 10.0,
+        pass_points: 5.0,
+        shuffle_questions: quickShuffleQuestions,
+        shuffle_options: quickShuffleOptions,
+        save_to_bank: quickSaveToBank,
+        questions: selectedQuestions,
+        assign_class_ids: quickAssignClassIds,
+      };
+
+      const res: any = await api.post('/exams/quick-create', payload);
+      if (res.success) {
+        alert('🎉 Tạo đề thi thành công! Câu hỏi đã tự động lưu vào ngân hàng đề.');
+        setShowQuickWordModal(false);
+        setParsedExam(null);
+        fetchExams();
+      }
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi tạo đề thi.');
+    } finally {
+      setIsSubmittingQuickExam(false);
+    }
+  };
+
+  // Submit tạo đề thi từ JSON / AI Prompt
+  const handleJsonExamSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!jsonExamText.trim()) {
+      alert('Vui lòng dán chuỗi JSON đề thi vào ô bên dưới.');
+      return;
+    }
+
+    setIsSubmittingJson(true);
+    try {
+      let parsedJson: any;
+      try {
+        parsedJson = JSON.parse(jsonExamText);
+      } catch (jsonErr) {
+        throw new Error('Định dạng JSON không hợp lệ! Vui lòng kiểm tra lại cú pháp.');
+      }
+
+      // Hỗ trợ cả mảng câu hỏi [...] hoặc object { title, questions: [...] }
+      const questionsList = Array.isArray(parsedJson) ? parsedJson : parsedJson.questions;
+      if (!Array.isArray(questionsList) || questionsList.length === 0) {
+        throw new Error('JSON phải chứa mảng danh sách câu hỏi hợp lệ!');
+      }
+
+      const examTitle = (!Array.isArray(parsedJson) && parsedJson.title)
+        ? parsedJson.title
+        : createForm.title.trim() || 'Đề Thi Từ AI';
+
+      const payload = {
+        title: examTitle,
+        code: createForm.code || undefined,
+        subject_id: createForm.subject_id,
+        duration_minutes: createForm.duration_minutes,
+        total_points: createForm.total_points,
+        pass_points: createForm.pass_points,
+        shuffle_questions: createForm.shuffle_questions,
+        shuffle_options: createForm.shuffle_options,
+        save_to_bank: true,
+        questions: questionsList,
+      };
+
+      const res: any = await api.post('/exams/quick-create', payload);
+      if (res.success) {
+        alert('🎉 Đã tạo đề thi từ JSON / AI thành công!');
+        setShowCreateModal(false);
+        setJsonExamText('');
+        fetchExams();
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Lỗi khi nhập đề từ JSON.');
+    } finally {
+      setIsSubmittingJson(false);
+    }
+  };
+
+  // Sao chép Prompt mẫu cho AI
+  const copyAiPrompt = () => {
+    const promptText = `Bạn là chuyên gia khảo thí THPT. Hãy tạo cho tôi 1 đề thi trắc nghiệm môn Hóa Học (hoặc môn tương ứng) gồm 10 câu hỏi theo định dạng JSON chuẩn xác sau:
+[
+  {
+    "content": "Câu 1: Số proton trong hạt nhân nguyên tử Carbon là bao nhiêu?",
+    "question_type": "single_choice",
+    "difficulty_level": 1,
+    "explanation": "Carbon có số hiệu nguyên tử Z = 6.",
+    "options": [
+      {"content": "6", "is_correct": true},
+      {"content": "12", "is_correct": false},
+      {"content": "8", "is_correct": false},
+      {"content": "14", "is_correct": false}
+    ]
+  }
+]
+Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không thêm giải thích hay lời mở đầu.`;
+    navigator.clipboard.writeText(promptText);
+    setCopiedPrompt(true);
+    setTimeout(() => setCopiedPrompt(false), 2000);
+  };
+
+  // Mở modal Đảo Đề Offline
+  const handleOpenOfflineModal = (exam: Exam) => {
+    setShowOfflineModal(exam);
+    setOfflineConfig((prev) => ({
+      ...prev,
+      school_name: 'TRƯỜNG THPT CHUYÊN CHU VĂN AN',
+      department_name: `TỔ CHUYÊN MÔN ${exam.subject?.name?.toUpperCase() || 'HÓA HỌC'}`,
+    }));
+    setOfflinePreviewData(null);
+  };
+
+  // Tải file Word đề thi đảo Offline (.docx)
+  const handleExportOfflineDocx = async () => {
+    if (!showOfflineModal) return;
+    setIsExportingDocx(true);
+    try {
+      const res: any = await api.get(`/exams/${showOfflineModal.id}/shuffled-offline`, {
+        params: offlineConfig,
+      });
+      if (res.success && res.data) {
+        const fullData: OfflineExamData = {
+          ...res.data,
+          school_name: offlineConfig.school_name,
+          department_name: offlineConfig.department_name,
+        };
+        const blob = await generateExamDocx(fullData);
+        downloadBlob(blob, `De_Thi_${showOfflineModal.code}_${offlineConfig.num_codes}_MaDe.docx`);
+      }
+    } catch (err: any) {
+      alert('Lỗi xuất file Word: ' + (err?.response?.data?.message || err?.message));
+    } finally {
+      setIsExportingDocx(false);
+    }
+  };
+
+  // Xem trước bảng ma trận đáp án Offline
+  const handleFetchOfflinePreview = async () => {
+    if (!showOfflineModal) return;
+    setLoadingOfflinePreview(true);
+    try {
+      const res: any = await api.get(`/exams/${showOfflineModal.id}/shuffled-offline`, {
+        params: offlineConfig,
+      });
+      if (res.success && res.data) {
+        setOfflinePreviewData(res.data);
+      }
+    } catch (err: any) {
+      alert('Lỗi tải dữ liệu đảo đề: ' + (err?.message || 'Không thể kết nối máy chủ'));
+    } finally {
+      setLoadingOfflinePreview(false);
+    }
+  };
+
   // Submit giao đề cho lớp
   const handleAssignExam = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -430,13 +710,25 @@ export const ExamBuilderView: React.FC = () => {
             Tạo đề thi mới, lấy câu hỏi từ ngân hàng, thiết lập thời gian làm bài và phân phối cho học sinh
           </p>
         </div>
-        <button
-          onClick={handleOpenCreateModal}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all self-start sm:self-auto shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Tạo Đề Thi Mới</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setShowQuickWordModal(true);
+              setParsedExam(null);
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-emerald-600/20 transition-all self-start sm:self-auto shrink-0"
+          >
+            <Zap className="w-4 h-4" />
+            <span>⚡ Tải Word Tạo Đề & Đề Con</span>
+          </button>
+          <button
+            onClick={handleOpenCreateModal}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all self-start sm:self-auto shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tạo Đề Thi Mới</span>
+          </button>
+        </div>
       </div>
 
       {/* Grid Đề thi */}
@@ -503,20 +795,20 @@ export const ExamBuilderView: React.FC = () => {
               </div>
 
               {/* Action buttons */}
-              <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => handleOpenPreview(exam)}
-                  className="flex items-center justify-center gap-1 px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                  className="flex items-center justify-center gap-1 px-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
                   title="Xem trước nội dung câu hỏi và đáp án của đề thi"
                 >
                   <Eye className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span>Xem trước</span>
+                  <span>Xem</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowAssignModal(exam)}
-                  className="flex items-center justify-center gap-1 px-2.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-xs shadow-indigo-600/10"
+                  className="flex items-center justify-center gap-1 px-2 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-xs shadow-indigo-600/10"
                   title="Giao đề thi cho lớp học"
                 >
                   <Send className="w-3.5 h-3.5 shrink-0" />
@@ -524,8 +816,17 @@ export const ExamBuilderView: React.FC = () => {
                 </button>
                 <button
                   type="button"
+                  onClick={() => handleOpenOfflineModal(exam)}
+                  className="flex items-center justify-center gap-1 px-2 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold border border-emerald-200 transition-colors cursor-pointer"
+                  title="Đảo đề thi & xuất file Word offline (nhiều mã đề kèm đáp án)"
+                >
+                  <Printer className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                  <span>Đảo Đề Word</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => navigate(`/teacher/exams/${exam.id}/analytics`)}
-                  className="flex items-center justify-center gap-1 px-2.5 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
+                  className="flex items-center justify-center gap-1 px-2 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
                   title="Xem phổ điểm và phân tích câu sai"
                 >
                   <BarChart2 className="w-3.5 h-3.5 shrink-0" />
@@ -559,12 +860,142 @@ export const ExamBuilderView: React.FC = () => {
                   <span>Tạo Đề Thi / Bài Kiểm Tra Mới Phân Hóa Chuẩn</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Thiết lập ma trận phân hóa nhận thức (Nhận biết, Thông hiểu, Vận dụng, Vận dụng cao) và quản lý câu hỏi
+                  Thiết lập ma trận phân hóa nhận thức hoặc dán trực tiếp JSON từ AI (ChatGPT/Gemini)
                 </p>
               </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleCreateExam} className="space-y-4 text-xs">
+            {/* TAB SELECTOR */}
+            <div className="flex border-b border-slate-200">
+              <button
+                type="button"
+                onClick={() => setCreateModalTab('manual')}
+                className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+                  createModalTab === 'manual'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Layers className="w-4 h-4" />
+                <span>Thủ Công & Ma Trận Phân Hóa</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateModalTab('json')}
+                className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
+                  createModalTab === 'json'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <Code className="w-4 h-4" />
+                <span>Nhập Đề Bằng JSON / AI Prompt</span>
+              </button>
+            </div>
+
+            {createModalTab === 'json' ? (
+              /* TAB NHẬP BẰNG JSON / AI */
+              <form onSubmit={handleJsonExamSubmit} className="space-y-4 text-xs">
+                <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-indigo-900 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-indigo-600" />
+                      Mẫu Prompt cho ChatGPT / Claude / Gemini
+                    </span>
+                    <button
+                      type="button"
+                      onClick={copyAiPrompt}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-500 transition-all shadow-xs"
+                    >
+                      {copiedPrompt ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedPrompt ? 'Đã sao chép prompt!' : 'Sao chép Prompt mẫu'}</span>
+                    </button>
+                  </div>
+                  <p className="text-slate-600 text-[11px] leading-relaxed">
+                    Bấm nút <strong>"Sao chép Prompt mẫu"</strong> ở trên, sau đó dán vào ChatGPT kèm nội dung bài học. Khi ChatGPT trả về chuỗi JSON, bạn chỉ cần copy và dán vào ô bên dưới là có ngay đề thi!
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Tên đề thi (tùy chọn - nếu JSON có trường title sẽ tự điền)
+                  </label>
+                  <input
+                    type="text"
+                    value={createForm.title}
+                    onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                    placeholder="Ví dụ: Đề Kiểm Tra Giữa Kì 1 Hóa Học 10"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Môn học *</label>
+                    <select
+                      value={createForm.subject_id}
+                      onChange={(e) => setCreateForm({ ...createForm, subject_id: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                    >
+                      {subjects.map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Thời gian làm bài (phút) *</label>
+                    <input
+                      type="number"
+                      value={createForm.duration_minutes}
+                      onChange={(e) => setCreateForm({ ...createForm, duration_minutes: Number(e.target.value) })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Dán chuỗi JSON đề thi vào đây *
+                  </label>
+                  <textarea
+                    rows={12}
+                    required
+                    value={jsonExamText}
+                    onChange={(e) => setJsonExamText(e.target.value)}
+                    placeholder={`[&#10;  {&#10;    "content": "Câu 1: Số proton trong hạt nhân nguyên tử Carbon là bao nhiêu?",&#10;    "question_type": "single_choice",&#10;    "difficulty_level": 1,&#10;    "options": [&#10;      {"content": "6", "is_correct": true},&#10;      {"content": "12", "is_correct": false}&#10;    ]&#10;  }&#10;]`}
+                    className="w-full bg-slate-900 text-emerald-400 font-mono border border-slate-700 rounded-xl p-3.5 text-xs focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(false)}
+                    className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-semibold"
+                  >
+                    Hủy bỏ
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingJson}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Code className="w-3.5 h-3.5" />
+                    <span>{isSubmittingJson ? 'Đang phân tích & tạo đề...' : 'Tạo Đề Từ JSON Ngay'}</span>
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* TAB THỦ CÔNG & MA TRẬN */
+              <form onSubmit={handleCreateExam} className="space-y-4 text-xs">
               {/* Tên đề thi */}
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Tên đề thi / Bài kiểm tra *</label>
@@ -1154,6 +1585,7 @@ export const ExamBuilderView: React.FC = () => {
                 </button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}
@@ -1601,6 +2033,520 @@ export const ExamBuilderView: React.FC = () => {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL TẠO ĐỀ CẤP TỐC TỪ WORD & ĐỀ CON ================= */}
+      {showQuickWordModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-emerald-600" />
+                  <span>Tạo Đề Thi Cấp Tốc Từ File Word & Tạo Đề Con</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Tải file Word lên có đề ngay, tự động chia nhóm câu hỏi, hỗ trợ bốc đề con ngẫu nhiên và lưu ngân hàng
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowQuickWordModal(false);
+                  setParsedExam(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickWordSubmit} className="space-y-4 text-xs">
+              {/* KHU VỰC TẢI FILE WORD */}
+              <div className="border-2 border-dashed border-slate-200 hover:border-emerald-500 rounded-2xl p-6 text-center transition-all bg-slate-50/50">
+                <input
+                  type="file"
+                  id="quickWordInput"
+                  accept=".docx"
+                  onChange={handleWordFileChange}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="quickWordInput"
+                  className="cursor-pointer flex flex-col items-center justify-center space-y-2"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-xs">
+                    <UploadCloud className="w-6 h-6" />
+                  </div>
+                  <div className="text-xs">
+                    <span className="font-semibold text-emerald-700 hover:underline">
+                      {quickWordParsing ? 'Đang đọc và bóc tách câu hỏi...' : 'Bấm để chọn file Word (.docx)'}
+                    </span>
+                    <span className="text-slate-500"> hoặc kéo thả vào đây</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Hỗ trợ file Word chuẩn GDPT: Phần I (A,B,C,D), Phần II (Đúng/Sai a,b,c,d), Phần III (Trả lời ngắn)
+                  </p>
+                </label>
+              </div>
+
+              {parsedExam && (
+                <div className="space-y-4">
+                  {/* BÁO CÁO KẾT QUẢ PARSE */}
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <div>
+                        <span className="font-bold text-emerald-900 text-xs">
+                          Đã bóc tách thành công {parsedExam.totalCount} câu hỏi:
+                        </span>
+                        <div className="text-[11px] text-emerald-700 flex gap-3 mt-0.5">
+                          <span>Nhóm 1 (Trắc nghiệm): {parsedExam.groups.part1.length} câu</span>
+                          <span>Nhóm 2 (Đúng/Sai): {parsedExam.groups.part2.length} câu</span>
+                          <span>Nhóm 3 (Trả lời ngắn): {parsedExam.groups.part3.length} câu</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* THIẾT LẬP THÔNG TIN CƠ BẢN */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Tên đề thi *</label>
+                      <input
+                        type="text"
+                        required
+                        value={quickExamTitle}
+                        onChange={(e) => setQuickExamTitle(e.target.value)}
+                        placeholder="Nhập tên đề thi..."
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-emerald-500 font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Môn học *</label>
+                      <select
+                        value={quickSubjectId}
+                        onChange={(e) => setQuickSubjectId(Number(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                      >
+                        {subjects.map((sub) => (
+                          <option key={sub.id} value={sub.id}>
+                            {sub.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Khối lớp (Tùy chọn)</label>
+                      <select
+                        value={quickGradeId}
+                        onChange={(e) => setQuickGradeId(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                      >
+                        <option value="">-- Mặc định --</option>
+                        <option value="1">Khối 10</option>
+                        <option value="2">Khối 11</option>
+                        <option value="3">Khối 12</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Thời gian làm bài (phút) *</label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={300}
+                        required
+                        value={quickDuration}
+                        onChange={(e) => setQuickDuration(Number(e.target.value))}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-emerald-700"
+                      />
+                    </div>
+                  </div>
+
+                  {/* TÍNH NĂNG TẠO ĐỀ CON (THEO CHUẨN AZOTA) */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-slate-800 text-xs">Tạo đề con từ đề gốc</span>
+                        <p className="text-[11px] text-slate-500">
+                          Bốc ngẫu nhiên số lượng câu hỏi từ đề gốc (Ví dụ: đề ôn tập 100 câu, bốc 28 câu ra thi)
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isSubExamMode}
+                          onChange={(e) => setIsSubExamMode(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-10 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                      </label>
+                    </div>
+
+                    {isSubExamMode && (
+                      <div className="space-y-2.5 pt-2 border-t border-slate-200">
+                        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700 pb-1">
+                          <span>
+                            Số lượng câu hỏi cần lấy:{' '}
+                            <strong className="text-emerald-700">
+                              {subExamPicks.part1Count + subExamPicks.part2Count + subExamPicks.part3Count}/
+                              {parsedExam.totalCount} câu
+                            </strong>
+                          </span>
+                          <span>
+                            Tổng điểm đã nhập:{' '}
+                            <strong className="text-indigo-700">
+                              {subExamPicks.part1Points + subExamPicks.part2Points + subExamPicks.part3Points} điểm
+                            </strong>
+                          </span>
+                        </div>
+
+                        {/* Nhóm 1 */}
+                        <div className="flex items-center justify-between gap-3 p-2 bg-white rounded-lg border border-slate-200">
+                          <span className="font-medium text-slate-700 min-w-[160px]">
+                            Nhóm 1 - Trắc nghiệm ({parsedExam.groups.part1.length} câu)
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400">Lấy:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={parsedExam.groups.part1.length}
+                              value={subExamPicks.part1Count}
+                              onChange={(e) =>
+                                setSubExamPicks({ ...subExamPicks, part1Count: Number(e.target.value) })
+                              }
+                              className="w-16 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-center font-bold"
+                            />
+                            <span className="text-slate-400">câu | Điểm:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.5}
+                              value={subExamPicks.part1Points}
+                              onChange={(e) =>
+                                setSubExamPicks({ ...subExamPicks, part1Points: Number(e.target.value) })
+                              }
+                              className="w-16 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-center font-bold text-indigo-600"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Nhóm 2 */}
+                        <div className="flex items-center justify-between gap-3 p-2 bg-white rounded-lg border border-slate-200">
+                          <span className="font-medium text-slate-700 min-w-[160px]">
+                            Nhóm 2 - Đúng/Sai ({parsedExam.groups.part2.length} câu)
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400">Lấy:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={parsedExam.groups.part2.length}
+                              value={subExamPicks.part2Count}
+                              onChange={(e) =>
+                                setSubExamPicks({ ...subExamPicks, part2Count: Number(e.target.value) })
+                              }
+                              className="w-16 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-center font-bold"
+                            />
+                            <span className="text-slate-400">câu | Điểm:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.5}
+                              value={subExamPicks.part2Points}
+                              onChange={(e) =>
+                                setSubExamPicks({ ...subExamPicks, part2Points: Number(e.target.value) })
+                              }
+                              className="w-16 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-center font-bold text-indigo-600"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Nhóm 3 */}
+                        <div className="flex items-center justify-between gap-3 p-2 bg-white rounded-lg border border-slate-200">
+                          <span className="font-medium text-slate-700 min-w-[160px]">
+                            Nhóm 3 - Trả lời ngắn ({parsedExam.groups.part3.length} câu)
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-400">Lấy:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={parsedExam.groups.part3.length}
+                              value={subExamPicks.part3Count}
+                              onChange={(e) =>
+                                setSubExamPicks({ ...subExamPicks, part3Count: Number(e.target.value) })
+                              }
+                              className="w-16 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-center font-bold"
+                            />
+                            <span className="text-slate-400">câu | Điểm:</span>
+                            <input
+                              type="number"
+                              min={0}
+                              step={0.5}
+                              value={subExamPicks.part3Points}
+                              onChange={(e) =>
+                                setSubExamPicks({ ...subExamPicks, part3Points: Number(e.target.value) })
+                              }
+                              className="w-16 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-center font-bold text-indigo-600"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ĐẢO ĐỀ & GIAO LỚP */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                    <label className="flex items-center gap-2 cursor-pointer p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                      <input
+                        type="checkbox"
+                        checked={quickShuffleQuestions}
+                        onChange={(e) => setQuickShuffleQuestions(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="font-medium text-slate-700">Đảo thứ tự câu hỏi và đáp án</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer p-2.5 bg-emerald-50/70 rounded-xl border border-emerald-200">
+                      <input
+                        type="checkbox"
+                        checked={quickSaveToBank}
+                        onChange={(e) => setQuickSaveToBank(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="font-semibold text-emerald-900">
+                        ✓ Tự động lưu câu hỏi vào Ngân hàng đề
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* CHỌN LỚP NHẬN ĐỀ */}
+                  {classes.length > 0 && (
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1.5">
+                        Giao đề thi ngay cho lớp học (tùy chọn)
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {classes.map((cls) => {
+                          const isSelected = quickAssignClassIds.includes(cls.id);
+                          return (
+                            <button
+                              key={cls.id}
+                              type="button"
+                              onClick={() => {
+                                setQuickAssignClassIds((prev) =>
+                                  isSelected ? prev.filter((id) => id !== cls.id) : [...prev, cls.id]
+                                );
+                              }}
+                              className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              {cls.name} ({cls.students_count || 0} HS)
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowQuickWordModal(false);
+                    setParsedExam(null);
+                  }}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-semibold"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingQuickExam || !parsedExam}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <Zap className="w-4 h-4" />
+                  <span>{isSubmittingQuickExam ? 'Đang tạo & lưu...' : 'Xác Nhận Tạo Đề & Giao Bài'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL ĐẢO ĐỀ OFFLINE & XUẤT FILE WORD ================= */}
+      {showOfflineModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-1 flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <Printer className="w-5 h-5 text-indigo-600" />
+                  <span>Đảo Đề Thi & Xuất File Word (.docx) Làm Bài Offline</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Đề thi: <strong>{showOfflineModal.title}</strong> ({showOfflineModal.code})
+                </p>
+              </div>
+              <button
+                onClick={() => setShowOfflineModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Tên Trường / Sở GD&ĐT</label>
+                  <input
+                    type="text"
+                    value={offlineConfig.school_name}
+                    onChange={(e) => setOfflineConfig({ ...offlineConfig, school_name: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Tổ chuyên môn</label>
+                  <input
+                    type="text"
+                    value={offlineConfig.department_name}
+                    onChange={(e) => setOfflineConfig({ ...offlineConfig, department_name: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* CHỌN SỐ LƯỢNG MÃ ĐỀ */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1.5">Số lượng mã đề cần đảo</label>
+                <div className="flex items-center gap-2">
+                  {[2, 4, 8].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setOfflineConfig({ ...offlineConfig, num_codes: n })}
+                      className={`px-4 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                        offlineConfig.num_codes === n
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {n} mã đề
+                    </button>
+                  ))}
+                  <div className="flex items-center gap-1.5 ml-4">
+                    <span className="text-slate-400">Mã bắt đầu:</span>
+                    <input
+                      type="number"
+                      value={offlineConfig.start_code}
+                      onChange={(e) => setOfflineConfig({ ...offlineConfig, start_code: Number(e.target.value) })}
+                      className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-center font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-50 rounded-lg border border-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={offlineConfig.shuffle_questions}
+                    onChange={(e) => setOfflineConfig({ ...offlineConfig, shuffle_questions: e.target.checked })}
+                    className="rounded text-indigo-600"
+                  />
+                  <span>Đảo thứ tự câu hỏi trong nhóm</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer p-2 bg-slate-50 rounded-lg border border-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={offlineConfig.shuffle_options}
+                    onChange={(e) => setOfflineConfig({ ...offlineConfig, shuffle_options: e.target.checked })}
+                    className="rounded text-indigo-600"
+                  />
+                  <span>Đảo thứ tự phương án A, B, C, D</span>
+                </label>
+              </div>
+
+              {/* BẢNG ĐÁP ÁN MA TRẬN XEM TRƯỚC */}
+              {offlinePreviewData && (
+                <div className="mt-4 p-4 bg-slate-900 text-slate-100 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between text-xs border-b border-slate-700 pb-2">
+                    <span className="font-bold text-emerald-400">BẢNG MA TRẬN ĐÁP ÁN TRA CỨU NHANH</span>
+                    <span className="text-slate-400">Tổng cộng: {offlinePreviewData.answer_matrix.total_questions} câu</span>
+                  </div>
+                  <div className="overflow-x-auto max-h-48">
+                    <table className="w-full text-[11px] font-mono">
+                      <thead>
+                        <tr className="text-slate-400 border-b border-slate-800">
+                          <th className="py-1 px-2 text-left">Mã Đề</th>
+                          {Array.from({ length: offlinePreviewData.answer_matrix.total_questions }).map((_, i) => (
+                            <th key={i} className="py-1 px-1.5 text-center">
+                              C{i + 1}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {offlinePreviewData.answer_matrix.rows.map((row) => (
+                          <tr key={row.code} className="hover:bg-slate-800/50">
+                            <td className="py-1 px-2 font-bold text-indigo-400">{row.code}</td>
+                            {Array.from({ length: offlinePreviewData.answer_matrix.total_questions }).map((_, i) => (
+                              <td key={i} className="py-1 px-1.5 text-center font-bold text-emerald-300">
+                                {row.answers[i + 1] || '-'}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleFetchOfflinePreview}
+                  disabled={loadingOfflinePreview}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Eye className="w-4 h-4 text-slate-500" />
+                  <span>{loadingOfflinePreview ? 'Đang tạo ma trận...' : 'Xem Trước Bảng Đáp Án'}</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowOfflineModal(null)}
+                    className="px-4 py-2 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-semibold cursor-pointer"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isExportingDocx}
+                    onClick={handleExportOfflineDocx}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold shadow-md shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>{isExportingDocx ? 'Đang tạo file Word...' : 'Tải File Word (.docx) Ngay'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

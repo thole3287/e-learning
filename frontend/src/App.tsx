@@ -20,6 +20,7 @@ import { QuestionBankView } from './features/teacher/QuestionBankView';
 import { ExamBuilderView } from './features/teacher/ExamBuilderView';
 import { ExamAnalyticsView } from './features/teacher/ExamAnalyticsView';
 import { TeacherPracticeResultsView } from './features/teacher/TeacherPracticeResultsView';
+import { ClassManagementView } from './features/teacher/ClassManagementView';
 
 // Exam Room Views
 import { ExamRoomView } from './features/exam-taking/ExamRoomView';
@@ -91,7 +92,7 @@ export const App: React.FC = () => {
           >
             <Route path="dashboard" element={<AdminDashboardView />} />
             <Route path="users" element={<UsersManagementView />} />
-            <Route path="classes" element={<UsersManagementView />} />
+            <Route path="classes" element={<ClassManagementView />} />
           </Route>
 
           {/* Teacher Routes */}
@@ -108,7 +109,7 @@ export const App: React.FC = () => {
             <Route path="exams" element={<ExamBuilderView />} />
             <Route path="exams/:examId/analytics" element={<ExamAnalyticsView />} />
             <Route path="practice-results" element={<TeacherPracticeResultsView />} />
-            <Route path="classes" element={<UsersManagementView />} />
+            <Route path="classes" element={<ClassManagementView />} />
           </Route>
 
           {/* Student Routes */}

@@ -168,7 +168,15 @@ class ExamTakingTest extends TestCase
             ['points' => 1.00, 'order_index' => 99]
         );
 
-        $attempt = ExamAttempt::firstOrFail();
+        $attempt = ExamAttempt::first() ?? ExamAttempt::create([
+            'exam_id' => $exam->id,
+            'exam_assignment_id' => ExamAssignment::firstOrFail()->id,
+            'student_id' => User::where('role', 'student')->firstOrFail()->id,
+            'attempt_number' => 1,
+            'status' => 'in_progress',
+            'started_at' => now(),
+            'expires_at' => now()->addMinutes(45),
+        ]);
 
         // 1. Đúng 1 ý: đạt 0.10 điểm (10%)
         $ans1 = new StudentAnswer([

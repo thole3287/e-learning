@@ -38,11 +38,14 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('users', UserController::class);
 
         // Classes & School Structure
+        Route::get('/grades', [SchoolClassController::class, 'getGrades']);
         Route::get('/classes', [SchoolClassController::class, 'index']);
         Route::post('/classes', [SchoolClassController::class, 'store']);
         Route::get('/classes/{class}', [SchoolClassController::class, 'show']);
         Route::put('/classes/{class}', [SchoolClassController::class, 'update']);
+        Route::delete('/classes/{class}', [SchoolClassController::class, 'destroy']);
         Route::post('/classes/{class}/students', [SchoolClassController::class, 'addStudents']);
+        Route::post('/classes/{class}/quick-add-students', [SchoolClassController::class, 'quickAddStudents']);
         Route::delete('/classes/{class}/students/{student}', [SchoolClassController::class, 'removeStudent']);
         Route::post('/classes/{class}/assign-teacher', [SchoolClassController::class, 'assignTeacher']);
 
@@ -61,11 +64,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/questions/{question}/duplicate', [QuestionController::class, 'duplicate']);
 
         // Exam Management
+        Route::post('/exams/quick-create', [ExamController::class, 'quickCreate']);
         Route::apiResource('exams', ExamController::class);
         Route::post('/exams/{exam}/questions', [ExamController::class, 'addQuestions']);
         Route::post('/exams/{exam}/generate-matrix', [ExamController::class, 'generateByMatrix']);
         Route::post('/exams/{exam}/publish', [ExamController::class, 'publish']);
         Route::post('/exams/{exam}/assign', [ExamController::class, 'assign']);
+        Route::get('/exams/{exam}/shuffled-offline', [ExamController::class, 'getShuffledOffline']);
 
         // Exam Taking Engine (Thí sinh & Phòng thi trực tuyến)
         Route::get('/student/exams', [ExamTakingController::class, 'getStudentExams']);

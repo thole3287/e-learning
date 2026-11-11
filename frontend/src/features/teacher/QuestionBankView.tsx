@@ -212,7 +212,18 @@ export const QuestionBankView: React.FC = () => {
           const numMatch = qBlock.match(/^(?:Câu|Bài)\s*(\d+)[\.:]/i);
           const qNum = numMatch ? parseInt(numMatch[1], 10) : questionGlobalIndex;
 
-          const blockWithoutHeader = qBlock.replace(/^(?:Câu|Bài)\s*\d+[\.:]\s*/i, '');
+          // Tự động nhận diện mức độ nhận thức qua thẻ [NB], [TH], [VD], [VDC]
+          let detectedDiff = defaultDiff || 1;
+          if (/\[(?:NB|1|Nhận biết)\]|<(?:NB|1|Nhận biết)>/i.test(qBlock)) detectedDiff = 1;
+          else if (/\[(?:TH|2|Thông hiểu)\]|<(?:TH|2|Thông hiểu)>/i.test(qBlock)) detectedDiff = 2;
+          else if (/\[(?:VD|3|Vận dụng)\]|<(?:VD|3|Vận dụng)>/i.test(qBlock)) detectedDiff = 3;
+          else if (/\[(?:VDC|4|Vận dụng cao)\]|<(?:VDC|4|Vận dụng cao)>/i.test(qBlock)) detectedDiff = 4;
+
+          const blockWithoutHeader = qBlock
+            .replace(/^(?:Câu|Bài)\s*\d+[\.:]\s*/i, '')
+            .replace(/\[(?:NB|TH|VD|VDC|\d+|Nhận biết|Thông hiểu|Vận dụng|Vận dụng cao)\]/gi, '')
+            .replace(/<(?:NB|TH|VD|VDC|\d+|Nhận biết|Thông hiểu|Vận dụng|Vận dụng cao)>/gi, '')
+            .trim();
 
           // Kiểm tra xem có các đáp án A., B., C., D. hay không
           const abcdPattern = /(?:^|[\s\t\n])(\*?)\s*([A-D])[\.\)](?:\s+|$)/g;
@@ -267,7 +278,7 @@ export const QuestionBankView: React.FC = () => {
             result.push({
               content,
               question_type: 'fill_in_blank',
-              difficulty_level: defaultDiff || 3,
+              difficulty_level: detectedDiff,
               explanation: expl ? `${expl}\nĐáp án: ${correctAns}` : `Đáp án: ${correctAns}`,
               options: [
                 { content: correctAns || 'Đáp án', is_correct: true },
@@ -345,7 +356,7 @@ export const QuestionBankView: React.FC = () => {
             result.push({
               content: mainContent,
               question_type: 'true_false',
-              difficulty_level: defaultDiff || 2,
+              difficulty_level: detectedDiff,
               options:
                 subOptions.length >= 2
                   ? subOptions
@@ -393,7 +404,7 @@ export const QuestionBankView: React.FC = () => {
               result.push({
                 content: qContent,
                 question_type: 'single_choice',
-                difficulty_level: defaultDiff || 1,
+                difficulty_level: detectedDiff,
                 options: optMatches.map((o) => ({
                   content: o.content,
                   is_correct: o.is_correct,
