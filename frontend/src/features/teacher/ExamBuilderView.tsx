@@ -77,7 +77,7 @@ export const ExamBuilderView: React.FC = () => {
     num_codes: 4,
     start_code: 1,
     school_name: 'TRƯỜNG THPT HẬU NGHĨA',
-    department_name: 'TỔ HÓA HỌC',
+    department_name: 'TỔ CHUYÊN MÔN',
     city_name: 'Hậu Nghĩa',
     teacher_name: 'Lê Trọng Đức',
     shuffle_questions: true,
@@ -615,10 +615,11 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
   // Mở modal Đảo Đề Offline
   const handleOpenOfflineModal = (exam: Exam) => {
     setShowOfflineModal(exam);
+    const subName = exam.subject?.name ? exam.subject.name.toUpperCase() : '';
     setOfflineConfig((prev) => ({
       ...prev,
       school_name: prev.school_name || 'TRƯỜNG THPT HẬU NGHĨA',
-      department_name: prev.department_name || `TỔ ${exam.subject?.name?.toUpperCase() || 'HÓA HỌC'}`,
+      department_name: subName ? `TỔ ${subName}` : (prev.department_name && prev.department_name !== 'TỔ HÓA HỌC' ? prev.department_name : 'TỔ CHUYÊN MÔN'),
     }));
     setOfflinePreviewData(null);
   };

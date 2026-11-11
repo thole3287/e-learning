@@ -59,14 +59,182 @@ export interface OfflineExamData {
   };
 }
 
+/**
+ * Hàm chuẩn hóa công thức Toán/Hóa học từ mã LaTeX sang ký tự Unicode chuyên nghiệp cho Word
+ */
+export const formatDocxMathAndText = (input: string): string => {
+  if (!input) return '';
+
+  let text = input;
+
+  // 1. Phân số: \frac{a}{b}, \dfrac{a}{b}, \tfrac{a}{b}
+  for (let iter = 0; iter < 3; iter++) {
+    text = text.replace(/\\(?:frac|dfrac|tfrac)\{([^{}]+)\}\{([^{}]+)\}/g, '($1)/($2)');
+  }
+  // Dạng đơn giản \frac12 hoặc \dfrac 1 2
+  text = text.replace(/\\(?:frac|dfrac|tfrac)\s*([0-9a-zA-Z])\s*([0-9a-zA-Z])/g, '($1)/($2)');
+
+  // 2. Ký hiệu tập hợp & quan hệ tập hợp
+  text = text
+    .replace(/\\mathbb\{R\}|\\mathbf\{R\}|\\bm\{R\}/g, 'ℝ')
+    .replace(/\\mathbb\{N\}|\\mathbf\{N\}|\\bm\{N\}/g, 'ℕ')
+    .replace(/\\mathbb\{Z\}|\\mathbf\{Z\}|\\bm\{Z\}/g, 'ℤ')
+    .replace(/\\mathbb\{Q\}|\\mathbf\{Q\}|\\bm\{Q\}/g, 'ℚ')
+    .replace(/\\mathbb\{C\}|\\mathbf\{C\}|\\bm\{C\}/g, 'ℂ')
+    .replace(/\\mathbb\{D\}|\\mathbf\{D\}|\\bm\{D\}/g, '𝔻')
+    .replace(/\\setminus/g, ' \\ ')
+    .replace(/\\in\b/g, '∈')
+    .replace(/\\notin\b/g, '∉')
+    .replace(/\\subset\b/g, '⊂')
+    .replace(/\\subseteq\b/g, '⊆')
+    .replace(/\\supset\b/g, '⊃')
+    .replace(/\\supseteq\b/g, '⊇')
+    .replace(/\\cup\b/g, '∪')
+    .replace(/\\cap\b/g, '∩')
+    .replace(/\\emptyset\b|\\varnothing\b/g, '∅')
+    .replace(/\\forall\b/g, '∀')
+    .replace(/\\exists\b/g, '∃');
+
+  // 3. Vô cùng, so sánh, đại số & hình học
+  text = text
+    .replace(/\\(?:pm|mp)\b/g, '±')
+    .replace(/\\times\b/g, '×')
+    .replace(/\\div\b/g, '÷')
+    .replace(/\\cdot\b/g, '·')
+    .replace(/\\bullet\b/g, '•')
+    .replace(/\\le\b|\\leq\b/g, '≤')
+    .replace(/\\ge\b|\\geq\b/g, '≥')
+    .replace(/\\ne\b|\\neq\b/g, '≠')
+    .replace(/\\approx\b/g, '≈')
+    .replace(/\\sim\b/g, '~')
+    .replace(/\\equiv\b/g, '≡')
+    .replace(/\\parallel\b/g, '∥')
+    .replace(/\\perp\b/g, '⊥')
+    .replace(/\\angle\b/g, '∠')
+    .replace(/\\rightleftharpoons\b/g, '⇌')
+    .replace(/\\rightleftarrows\b/g, '⇄')
+    .replace(/\\rightarrow\b|\\to\b/g, '→')
+    .replace(/\\leftarrow\b/g, '←')
+    .replace(/\\Rightarrow\b/g, '⇒')
+    .replace(/\\Leftrightarrow\b/g, '⇔')
+    .replace(/\\leftrightarrow\b/g, '↔')
+    .replace(/\\infty\b/g, '∞');
+
+  // 4. Đạo hàm & độ
+  text = text
+    .replace(/\\prime\b/g, "'")
+    .replace(/\^\{\\circ\}|\^\\circ|\\degree\b/g, '°');
+
+  // 5. Ký tự Hy Lạp
+  text = text
+    .replace(/\\alpha\b/g, 'α')
+    .replace(/\\beta\b/g, 'β')
+    .replace(/\\gamma\b/g, 'γ')
+    .replace(/\\pi\b/g, 'π')
+    .replace(/\\theta\b/g, 'θ')
+    .replace(/\\lambda\b/g, 'λ')
+    .replace(/\\Delta\b/g, 'Δ')
+    .replace(/\\delta\b/g, 'δ')
+    .replace(/\\sigma\b/g, 'σ')
+    .replace(/\\omega\b/g, 'ω')
+    .replace(/\\Omega\b/g, 'Ω')
+    .replace(/\\mu\b/g, 'μ')
+    .replace(/\\rho\b/g, 'ρ')
+    .replace(/\\phi\b/g, 'φ')
+    .replace(/\\Phi\b/g, 'Φ');
+
+  // 6. Căn bậc hai & căn bậc n
+  text = text.replace(/\\sqrt\{([^{}]+)\}/g, '√($1)');
+  text = text.replace(/\\sqrt\[([^\]]+)\]\{([^{}]+)\}/g, '$1√($2)');
+
+  // 7. Số mũ và chỉ số dưới Unicode
+  const supers: Record<string, string> = {
+    '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
+    '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹',
+    '+': '⁺', '-': '⁻', '=': '⁼', '(': '⁽', ')': '⁾',
+    'n': 'ⁿ', 'x': 'ˣ', 'y': 'ʸ'
+  };
+  text = text.replace(/\^([0-9+\-=()nxy])/g, (_, ch) => supers[ch] || `^${ch}`);
+  text = text.replace(/\^\{([0-9+\-=()nxy]+)\}/g, (_, str) => {
+    return str.split('').map((c: string) => supers[c] || c).join('');
+  });
+
+  const subs: Record<string, string> = {
+    '0': '₀', '1': '₁', '2': '₂', '3': '₃', '4': '₄',
+    '5': '₅', '6': '₆', '7': '₇', '8': '₈', '9': '₉',
+    '+': '₊', '-': '₋', '=': '₌', '(': '₍', ')': '₎',
+    'a': 'ₐ', 'e': 'ₑ', 'x': 'ₓ'
+  };
+  text = text.replace(/_([0-9+\-=()aex])/g, (_, ch) => subs[ch] || `_${ch}`);
+  text = text.replace(/_\{([0-9+\-=()aex]+)\}/g, (_, str) => {
+    return str.split('').map((c: string) => subs[c] || c).join('');
+  });
+
+  // 8. Hàm số phổ biến (loại bỏ \sin -> sin)
+  text = text
+    .replace(/\\(?:sin|cos|tan|cot|ln|log|exp|lim|max|min)\b/g, (m) => m.substring(1));
+
+  // 9. Dọn dẹp thẻ text, left/right và khoảng trắng LaTeX
+  text = text
+    .replace(/\\text\{([^{}]+)\}/g, '$1')
+    .replace(/\\textbf\{([^{}]+)\}/g, '$1')
+    .replace(/\\mathbf\{([^{}]+)\}/g, '$1')
+    .replace(/\\mathrm\{([^{}]+)\}/g, '$1')
+    .replace(/\\left|\\right/g, '')
+    .replace(/\\\{/g, '{')
+    .replace(/\\\}/g, '}')
+    .replace(/\\[,;!]/g, ' ')
+    .replace(/\\quad|\\qquad/g, ' ');
+
+  // 10. Xóa triệt để dấu $ và $$
+  text = text.replace(/\$\$/g, '').replace(/\$/g, '');
+
+  // 11. Chuẩn hóa khoảng trắng
+  return text.replace(/[ \t]+/g, ' ').trim();
+};
+
 export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => {
   const sections: any[] = [];
 
   const schoolName = data.school_name || 'TRƯỜNG THPT HẬU NGHĨA';
-  const deptName = data.department_name || `TỔ ${data.subject_name ? data.subject_name.toUpperCase() : 'HÓA HỌC'}`;
+  const subjectName = (data.subject_name || '').toUpperCase();
   const examTitle = data.exam_title.toUpperCase();
-  const subjectGrade = `ĐỀ KIỂM TRA MÔN ${data.subject_name ? data.subject_name.toUpperCase() : 'HÓA HỌC'}\n${data.grade_name ? data.grade_name.toUpperCase() : 'KHỐI 10'} – HỆ GDPT`;
+
+  // Tự động nhận diện Khối từ exam_title nếu data.grade_name trống
+  let gradeName = data.grade_name ? data.grade_name.toUpperCase() : '';
+  if (!gradeName) {
+    const gradeMatch = examTitle.match(/(?:KHỐI|LỚP|K)\s*(10|11|12)\b/i) || examTitle.match(/\b(10|11|12)\b/);
+    if (gradeMatch) {
+      gradeName = `KHỐI ${gradeMatch[1]}`;
+    }
+  }
+
+  // Tự động điều chỉnh Tổ bộ môn chính xác theo môn học
+  let deptName = data.department_name;
+  if (!deptName || deptName === 'TỔ CHUYÊN MÔN' || (subjectName && deptName === 'TỔ HÓA HỌC' && !subjectName.includes('HÓA'))) {
+    deptName = subjectName ? `TỔ ${subjectName}` : 'TỔ CHUYÊN MÔN';
+  }
+
+  // Dòng 2 tiêu đề đề thi: MÔN TOÁN HỌC – KHỐI 12 (HỆ GDPT)
+  let line2Right = '';
+  if (subjectName && examTitle.includes(subjectName)) {
+    // Nếu tiêu đề đã chứa tên môn (VD: BÀI KIỂM TRA TOÁN HỌC) thì chỉ ghi Khối
+    line2Right = gradeName ? `${gradeName} – CHƯƠNG TRÌNH GDPT 2018` : 'CHƯƠNG TRÌNH GDPT 2018';
+  } else {
+    const subPart = subjectName ? `MÔN ${subjectName}` : 'MÔN HỌC';
+    line2Right = gradeName ? `${subPart} – ${gradeName} (HỆ GDPT)` : `${subPart} – HỆ GDPT`;
+  }
+
   const duration = `Thời gian làm bài: ${data.duration_minutes || 45} phút (không kể thời gian phát đề)`;
+
+  const borderless = {
+    top: { style: BorderStyle.NONE },
+    bottom: { style: BorderStyle.NONE },
+    left: { style: BorderStyle.NONE },
+    right: { style: BorderStyle.NONE },
+    insideHorizontal: { style: BorderStyle.NONE },
+    insideVertical: { style: BorderStyle.NONE },
+  };
 
   // ================= 1. CÁC MÃ ĐỀ THI =================
   data.variants.forEach((variant) => {
@@ -75,20 +243,14 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
     // Header 2 cột chuẩn mẫu trường THPT
     const headerTable = new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: {
-        top: { style: BorderStyle.NONE },
-        bottom: { style: BorderStyle.NONE },
-        left: { style: BorderStyle.NONE },
-        right: { style: BorderStyle.NONE },
-        insideHorizontal: { style: BorderStyle.NONE },
-        insideVertical: { style: BorderStyle.NONE },
-      },
+      borders: borderless,
       rows: [
         new TableRow({
           children: [
             // Cột trái: Thông tin Trường, Tổ
             new TableCell({
               width: { size: 45, type: WidthType.PERCENTAGE },
+              borders: borderless,
               children: [
                 new Paragraph({
                   alignment: AlignmentType.CENTER,
@@ -100,7 +262,7 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
                 }),
                 new Paragraph({
                   alignment: AlignmentType.CENTER,
-                  spacing: { after: 120 },
+                  spacing: { after: 100 },
                   children: [new TextRun({ text: '(Đề thi có 2 trang)', italics: true, size: 18 })],
                 }),
               ],
@@ -108,6 +270,7 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
             // Cột phải: Kỳ kiểm tra, Môn, Khối, Thời gian
             new TableCell({
               width: { size: 55, type: WidthType.PERCENTAGE },
+              borders: borderless,
               children: [
                 new Paragraph({
                   alignment: AlignmentType.CENTER,
@@ -115,11 +278,11 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
                 }),
                 new Paragraph({
                   alignment: AlignmentType.CENTER,
-                  children: [new TextRun({ text: subjectGrade, bold: true, size: 20 })],
+                  children: [new TextRun({ text: line2Right, bold: true, size: 20 })],
                 }),
                 new Paragraph({
                   alignment: AlignmentType.CENTER,
-                  spacing: { after: 120 },
+                  spacing: { after: 100 },
                   children: [new TextRun({ text: duration, italics: true, size: 18 })],
                 }),
               ],
@@ -131,25 +294,19 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
 
     children.push(headerTable);
 
-    // Dòng Họ tên học sinh & Mã đề thi (khung bảng)
+    // Dòng Họ tên học sinh & Mã đề thi
     const studentInfoTable = new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      borders: {
-        top: { style: BorderStyle.NONE },
-        bottom: { style: BorderStyle.NONE },
-        left: { style: BorderStyle.NONE },
-        right: { style: BorderStyle.NONE },
-        insideHorizontal: { style: BorderStyle.NONE },
-        insideVertical: { style: BorderStyle.NONE },
-      },
+      borders: borderless,
       rows: [
         new TableRow({
           children: [
             new TableCell({
-              width: { size: 70, type: WidthType.PERCENTAGE },
+              width: { size: 68, type: WidthType.PERCENTAGE },
+              borders: borderless,
               children: [
                 new Paragraph({
-                  spacing: { before: 80, after: 80 },
+                  spacing: { before: 80, after: 140 },
                   children: [
                     new TextRun({
                       text: 'Họ tên : ............................................................... Lớp : ...................',
@@ -161,11 +318,12 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
               ],
             }),
             new TableCell({
-              width: { size: 30, type: WidthType.PERCENTAGE },
+              width: { size: 32, type: WidthType.PERCENTAGE },
+              borders: borderless,
               children: [
                 new Paragraph({
-                  alignment: AlignmentType.CENTER,
-                  spacing: { before: 80, after: 80 },
+                  alignment: AlignmentType.RIGHT,
+                  spacing: { before: 80, after: 140 },
                   children: [
                     new TextRun({
                       text: `Mã đề ${variant.code}`,
@@ -182,15 +340,6 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
     });
 
     children.push(studentInfoTable);
-
-    // Đường gạch nét phân cách
-    children.push(
-      new Paragraph({
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 200 },
-        children: [new TextRun({ text: '_________________________________________________________________________________', size: 16 })],
-      })
-    );
 
     // NỘI DUNG 4 PHẦN CỦA ĐỀ THI
     const parts = [
@@ -219,10 +368,10 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
 
       // Danh sách câu hỏi
       part.questions.forEach((q: any) => {
-        const cleanContent = (q.content || '').replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2');
+        const cleanContent = formatDocxMathAndText(q.content || '');
         children.push(
           new Paragraph({
-            spacing: { before: 100, after: 50 },
+            spacing: { before: 100, after: 40 },
             children: [
               new TextRun({
                 text: `Câu ${q.question_number}. `,
@@ -242,6 +391,7 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
           if (q.question_type === 'true_false') {
             // Đúng / Sai: in a), b), c), d)
             q.options.forEach((opt: any) => {
+              const cleanOpt = formatDocxMathAndText(opt.content.replace(/^[a-d]\)\s*/i, ''));
               children.push(
                 new Paragraph({
                   indent: { left: 360 },
@@ -253,7 +403,7 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
                       size: 20,
                     }),
                     new TextRun({
-                      text: `${opt.content.replace(/^[a-d]\)\s*/i, '')}`,
+                      text: cleanOpt,
                       size: 20,
                     }),
                   ],
@@ -262,34 +412,83 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
             });
           } else if (q.question_type === 'short_answer' || q.question_type === 'fill_in_blank') {
             // Trả lời ngắn / Tự luận
-            // Không in phương án A B C D
           } else {
             // Trắc nghiệm 4 lựa chọn (A, B, C, D)
-            // Ghép 2 lựa chọn 1 dòng hoặc 1 dòng nếu ngắn
-            const optRuns: TextRun[] = [];
-            q.options.forEach((opt: any, idx: number) => {
-              optRuns.push(
-                new TextRun({
-                  text: `${opt.label}. `,
-                  bold: true,
-                  size: 20,
-                })
-              );
-              optRuns.push(
-                new TextRun({
-                  text: `${opt.content}${idx < q.options.length - 1 ? '\t\t' : ''}`,
-                  size: 20,
-                })
-              );
-            });
+            const formattedOpts = q.options.map((opt: any) => ({
+              label: opt.label || 'A',
+              content: formatDocxMathAndText(opt.content || ''),
+            }));
 
-            children.push(
-              new Paragraph({
-                indent: { left: 360 },
-                spacing: { after: 50 },
-                children: optRuns,
-              })
-            );
+            const maxLen = Math.max(...formattedOpts.map((o: any) => o.content.length));
+
+            if (maxLen <= 10 && formattedOpts.length === 4) {
+              // 1 hàng 4 cột (25% mỗi cột) - Dành cho số hoặc ký tự ngắn (1, -1, 3, -2)
+              const rowCells = formattedOpts.map((opt: any) =>
+                new TableCell({
+                  width: { size: 25, type: WidthType.PERCENTAGE },
+                  borders: borderless,
+                  children: [
+                    new Paragraph({
+                      spacing: { before: 20, after: 30 },
+                      children: [
+                        new TextRun({ text: `${opt.label}. `, bold: true, size: 20 }),
+                        new TextRun({ text: opt.content, size: 20 }),
+                      ],
+                    }),
+                  ],
+                })
+              );
+              children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: borderless, rows: [new TableRow({ children: rowCells })] }));
+            } else if (maxLen <= 32) {
+              // 2 hàng 2 cột (50% mỗi cột) - Dành cho biểu thức vừa (y' = 3x² - 6x)
+              const tRows: TableRow[] = [];
+              for (let i = 0; i < formattedOpts.length; i += 2) {
+                const pair = formattedOpts.slice(i, i + 2);
+                tRows.push(
+                  new TableRow({
+                    children: pair.map((opt: any) =>
+                      new TableCell({
+                        width: { size: 50, type: WidthType.PERCENTAGE },
+                        borders: borderless,
+                        children: [
+                          new Paragraph({
+                            spacing: { before: 20, after: 30 },
+                            children: [
+                              new TextRun({ text: `${opt.label}. `, bold: true, size: 20 }),
+                              new TextRun({ text: opt.content, size: 20 }),
+                            ],
+                          }),
+                        ],
+                      })
+                    ),
+                  })
+                );
+              }
+              children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: borderless, rows: tRows }));
+            } else {
+              // 4 hàng 1 cột (100%) - Dành cho câu dài giải thích
+              const tRows = formattedOpts.map((opt: any) =>
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      width: { size: 100, type: WidthType.PERCENTAGE },
+                      borders: borderless,
+                      children: [
+                        new Paragraph({
+                          indent: { left: 360 },
+                          spacing: { before: 20, after: 30 },
+                          children: [
+                            new TextRun({ text: `${opt.label}. `, bold: true, size: 20 }),
+                            new TextRun({ text: opt.content, size: 20 }),
+                          ],
+                        }),
+                      ],
+                    }),
+                  ],
+                })
+              );
+              children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: borderless, rows: tRows }));
+            }
           }
         }
       });
@@ -320,19 +519,13 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
   // Header Hướng dẫn chấm
   const guideHeaderTable = new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: {
-      top: { style: BorderStyle.NONE },
-      bottom: { style: BorderStyle.NONE },
-      left: { style: BorderStyle.NONE },
-      right: { style: BorderStyle.NONE },
-      insideHorizontal: { style: BorderStyle.NONE },
-      insideVertical: { style: BorderStyle.NONE },
-    },
+    borders: borderless,
     rows: [
       new TableRow({
         children: [
           new TableCell({
             width: { size: 45, type: WidthType.PERCENTAGE },
+            borders: borderless,
             children: [
               new Paragraph({
                 alignment: AlignmentType.CENTER,
@@ -346,6 +539,7 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
           }),
           new TableCell({
             width: { size: 55, type: WidthType.PERCENTAGE },
+            borders: borderless,
             children: [
               new Paragraph({
                 alignment: AlignmentType.CENTER,
@@ -353,11 +547,11 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: `HƯỚNG DẪN CHẤM MÔN ${data.subject_name ? data.subject_name.toUpperCase() : 'HÓA HỌC'}`, bold: true, size: 20 })],
+                children: [new TextRun({ text: `HƯỚNG DẪN CHẤM MÔN ${subjectName}`, bold: true, size: 20 })],
               }),
               new Paragraph({
                 alignment: AlignmentType.CENTER,
-                children: [new TextRun({ text: `${data.grade_name ? data.grade_name.toUpperCase() : 'KHỐI 10'} – HỆ GDPT`, bold: true, size: 20 })],
+                children: [new TextRun({ text: `${gradeName} – HỆ GDPT`, bold: true, size: 20 })],
               }),
             ],
           }),
@@ -388,7 +582,6 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
     );
 
     const p1Rows: TableRow[] = [];
-    // Header
     const hCells = [
       new TableCell({
         borders: borderStyle,
@@ -404,7 +597,6 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
     ];
     p1Rows.push(new TableRow({ children: hCells }));
 
-    // Rows
     data.answer_matrix.part1.forEach((item) => {
       const rCells = [
         new TableCell({
@@ -513,7 +705,7 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
           (c) =>
             new TableCell({
               borders: borderStyle,
-              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: item.answers[c] || '-', size: 18 })] })],
+              children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: formatDocxMathAndText(item.answers[c] || '-'), size: 18 })] })],
             })
         ),
       ];
@@ -560,7 +752,7 @@ export const generateExamDocx = async (data: OfflineExamData): Promise<Blob> => 
         }),
         new TableCell({
           borders: borderStyle,
-          children: [new Paragraph({ children: [new TextRun({ text: item.content, size: 18 })] })],
+          children: [new Paragraph({ children: [new TextRun({ text: formatDocxMathAndText(item.content), size: 18 })] })],
         }),
         new TableCell({
           borders: borderStyle,
