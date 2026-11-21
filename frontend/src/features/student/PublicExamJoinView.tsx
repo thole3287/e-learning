@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { Clock, BookOpen, Award, Calendar, CheckCircle2, AlertCircle, ArrowRight, UserCheck, School, Eye } from 'lucide-react';
+import { Clock, BookOpen, Award, Calendar, CheckCircle2, AlertCircle, ArrowRight, UserCheck, School, Eye, Lock } from 'lucide-react';
 
 interface PublicExamDetails {
   id: number;
@@ -17,6 +17,7 @@ interface PublicExamDetails {
   views_count?: number;
   start_time: string;
   end_time: string;
+  has_password?: boolean;
   is_open: boolean;
   status_label: 'upcoming' | 'open' | 'closed';
   assignment_id?: number;
@@ -36,6 +37,7 @@ export const PublicExamJoinView: React.FC = () => {
   const [guestName, setGuestName] = useState('');
   const [guestClass, setGuestClass] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
+  const [enteredPassword, setEnteredPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [forceGuestMode, setForceGuestMode] = useState(false);
 
@@ -83,9 +85,15 @@ export const PublicExamJoinView: React.FC = () => {
   // Học sinh đã đăng nhập vào thi
   const handleLoggedInJoin = async () => {
     if (!code) return;
+    if (exam?.has_password && !enteredPassword.trim()) {
+      alert('Vui lòng nhập mật khẩu phòng thi!');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      const res: any = await api.post(`/exams/public/${code}/join`);
+      const res: any = await api.post(`/exams/public/${code}/join`, {
+        access_password: enteredPassword.trim(),
+      });
       if (res.success && res.data?.assignment_id) {
         navigate(`/exam/room/${res.data.assignment_id}`);
       } else {
@@ -105,6 +113,10 @@ export const PublicExamJoinView: React.FC = () => {
       alert('Vui lòng nhập họ và tên của bạn!');
       return;
     }
+    if (exam?.has_password && !enteredPassword.trim()) {
+      alert('Vui lòng nhập mật khẩu phòng thi!');
+      return;
+    }
     if (!code) return;
 
     setIsSubmitting(true);
@@ -113,6 +125,7 @@ export const PublicExamJoinView: React.FC = () => {
         full_name: guestName.trim(),
         class_name: guestClass.trim(),
         phone: guestPhone.trim(),
+        access_password: enteredPassword.trim(),
       });
 
       if (res.success && res.data?.token && res.data?.assignment_id) {
@@ -303,6 +316,26 @@ export const PublicExamJoinView: React.FC = () => {
                 </div>
               </div>
 
+              {exam.has_password && (
+                <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 space-y-1.5 text-left">
+                  <label className="block text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Mật khẩu phòng thi <span className="text-rose-500">*</span></span>
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={enteredPassword}
+                    onChange={(e) => setEnteredPassword(e.target.value)}
+                    placeholder="Nhập mật khẩu do Giáo viên cung cấp"
+                    className="w-full bg-white border border-amber-300 rounded-xl px-3.5 py-2.5 text-xs font-mono focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all text-slate-800"
+                  />
+                  <p className="text-[11px] text-amber-700">
+                    🔒 Đề thi này có cài đặt mật khẩu bảo vệ.
+                  </p>
+                </div>
+              )}
+
               <button
                 onClick={handleLoggedInJoin}
                 disabled={isSubmitting || !exam.is_open}
@@ -380,6 +413,26 @@ export const PublicExamJoinView: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {exam.has_password && (
+                <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 space-y-1.5 text-left">
+                  <label className="block text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Mật khẩu phòng thi <span className="text-rose-500">*</span></span>
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={enteredPassword}
+                    onChange={(e) => setEnteredPassword(e.target.value)}
+                    placeholder="Nhập mật khẩu do Giáo viên cung cấp"
+                    className="w-full bg-white border border-amber-300 rounded-xl px-3.5 py-2.5 text-xs font-mono focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500 transition-all text-slate-800"
+                  />
+                  <p className="text-[11px] text-amber-700">
+                    🔒 Đề thi này có cài đặt mật khẩu. Vui lòng nhập đúng để vào phòng thi.
+                  </p>
+                </div>
+              )}
 
               <button
                 type="submit"

@@ -89,6 +89,7 @@ class ExamController extends Controller
             'end_time' => 'nullable|date',
             'max_attempts' => 'nullable|integer|min:1|max:10',
             'is_public_link' => 'nullable|boolean',
+            'access_password' => 'nullable|string|max:50',
             'tf_grading_method' => 'nullable|string',
             'tf_grading_weights' => 'nullable|array',
             'assign_class_ids' => 'nullable|array',
@@ -112,6 +113,7 @@ class ExamController extends Controller
                 'tf_grading_weights' => $validated['tf_grading_weights'] ?? [10, 25, 50, 100],
                 'is_public_link' => $validated['is_public_link'] ?? true,
                 'max_attempts' => $validated['max_attempts'] ?? 1,
+                'access_password' => !empty($validated['access_password']) ? trim($validated['access_password']) : null,
                 'views_count' => 0,
             ];
             $exam->settings = $settings;
@@ -397,6 +399,7 @@ class ExamController extends Controller
             'end_time' => 'nullable|date',
             'max_attempts' => 'nullable|integer|min:1|max:10',
             'is_public_link' => 'nullable|boolean',
+            'access_password' => 'nullable|string|max:50',
         ]);
 
         $settings = $exam->settings ?? [];
@@ -411,6 +414,9 @@ class ExamController extends Controller
         }
         if (array_key_exists('is_public_link', $validated)) {
             $settings['is_public_link'] = (bool) $validated['is_public_link'];
+        }
+        if (array_key_exists('access_password', $validated)) {
+            $settings['access_password'] = !empty($validated['access_password']) ? trim($validated['access_password']) : null;
         }
         $exam->settings = $settings;
         $exam->save();
@@ -465,6 +471,7 @@ class ExamController extends Controller
             'tf_grading_method' => 'nullable|string',
             'tf_grading_weights' => 'nullable|array',
             'is_public_link' => 'nullable|boolean',
+            'access_password' => 'nullable|string|max:50',
             'max_attempts' => 'nullable|integer|min:1|max:10',
             'questions' => 'required|array|min:1',
             'questions.*.content' => 'required|string',
@@ -498,6 +505,7 @@ class ExamController extends Controller
                 'tf_grading_weights' => $validated['tf_grading_weights'] ?? [10, 25, 50, 100],
                 'is_public_link' => $validated['is_public_link'] ?? true,
                 'max_attempts' => $validated['max_attempts'] ?? 1,
+                'access_password' => !empty($validated['access_password']) ? trim($validated['access_password']) : null,
             ];
 
             $exam = new Exam([
@@ -649,6 +657,7 @@ class ExamController extends Controller
                 'views_count' => $settings['views_count'],
                 'start_time' => $startTime->toISOString(),
                 'end_time' => $endTime->toISOString(),
+                'has_password' => !empty($settings['access_password']),
                 'is_open' => $isOpen,
                 'status_label' => $now->lt($startTime) ? 'upcoming' : ($isOpen ? 'open' : 'closed'),
                 'assignment_id' => $assignment?->id,
@@ -666,6 +675,20 @@ class ExamController extends Controller
         $exam = Exam::where('code', $code)->first();
         if (!$exam) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy đề thi này.'], 404);
+        }
+
+        // Kiểm tra mật khẩu phòng thi nếu giáo viên cài đặt
+        $settings = $exam->settings ?? [];
+        if (!empty($settings['access_password'])) {
+            if (!$user->isSuperAdmin() && $exam->creator_id !== $user->id) {
+                $providedPassword = trim((string) $request->input('access_password', ''));
+                if ($providedPassword !== trim((string) $settings['access_password'])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Mật khẩu vào phòng thi không chính xác! Vui lòng liên hệ giáo viên để nhận mật khẩu.',
+                    ], 403);
+                }
+            }
         }
 
         // Tìm assignment thích hợp
@@ -724,6 +747,18 @@ class ExamController extends Controller
         $exam = Exam::where('code', $code)->first();
         if (!$exam) {
             return response()->json(['success' => false, 'message' => 'Không tìm thấy đề thi này.'], 404);
+        }
+
+        // Kiểm tra mật khẩu phòng thi nếu giáo viên cài đặt
+        $settings = $exam->settings ?? [];
+        if (!empty($settings['access_password'])) {
+            $providedPassword = trim((string) $request->input('access_password', ''));
+            if ($providedPassword !== trim((string) $settings['access_password'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Mật khẩu vào phòng thi không chính xác! Vui lòng liên hệ giáo viên để nhận mật khẩu.',
+                ], 403);
+            }
         }
 
         $cleanName = trim($validated['full_name']);

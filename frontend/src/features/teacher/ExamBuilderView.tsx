@@ -23,6 +23,7 @@ import {
   Search,
   Eye,
   EyeOff,
+  Lock,
   Printer,
   X,
   UploadCloud,
@@ -87,6 +88,7 @@ export const ExamBuilderView: React.FC = () => {
   const [quickEndTime, setQuickEndTime] = useState(getInitialDateTime(7));
   const [quickMaxAttempts, setQuickMaxAttempts] = useState(1);
   const [quickIsPublicLink, setQuickIsPublicLink] = useState(true);
+  const [quickAccessPassword, setQuickAccessPassword] = useState('');
   const [quickTfMethod, setQuickTfMethod] = useState<'moet' | 'equal' | 'custom'>('moet');
   const [quickTfWeights, setQuickTfWeights] = useState<number[]>([10, 25, 50, 100]);
   const [quickChapterId, setQuickChapterId] = useState<string | number>('');
@@ -207,6 +209,7 @@ export const ExamBuilderView: React.FC = () => {
   const [editEndTime, setEditEndTime] = useState('');
   const [editMaxAttempts, setEditMaxAttempts] = useState(1);
   const [editIsPublicLink, setEditIsPublicLink] = useState(true);
+  const [editAccessPassword, setEditAccessPassword] = useState('');
   const [isSubmittingSchedule, setIsSubmittingSchedule] = useState(false);
 
   const getExamDescription = (desc?: string | null) => {
@@ -231,6 +234,7 @@ export const ExamBuilderView: React.FC = () => {
     setEditEndTime(endTime ? new Date(endTime).toISOString().slice(0, 16) : getInitialDateTime(7));
     setEditMaxAttempts(exam.settings?.max_attempts || exam.assignments?.[0]?.max_attempts || 1);
     setEditIsPublicLink(exam.settings?.is_public_link !== false);
+    setEditAccessPassword(exam.settings?.access_password || '');
   };
 
   const handleQuickExtend = (hours: number) => {
@@ -250,6 +254,7 @@ export const ExamBuilderView: React.FC = () => {
         end_time: editEndTime ? new Date(editEndTime).toISOString() : null,
         max_attempts: editMaxAttempts,
         is_public_link: editIsPublicLink,
+        access_password: editAccessPassword.trim() || null,
       };
       const res: any = await api.post(`/exams/${showScheduleModal.id}/schedule`, payload);
       if (res.success) {
@@ -581,6 +586,7 @@ export const ExamBuilderView: React.FC = () => {
         end_time: quickEndTime ? new Date(quickEndTime).toISOString() : null,
         max_attempts: quickMaxAttempts || 1,
         is_public_link: quickIsPublicLink,
+        access_password: quickAccessPassword.trim() || null,
         assign_class_ids: quickAssignClassIds,
         tf_grading_method: quickTfMethod,
         tf_grading_weights: quickTfWeights,
@@ -751,6 +757,7 @@ export const ExamBuilderView: React.FC = () => {
         tf_grading_method: quickTfMethod,
         tf_grading_weights: quickTfWeights,
         is_public_link: quickIsPublicLink,
+        access_password: quickAccessPassword.trim() || null,
         max_attempts: quickMaxAttempts,
         start_time: quickStartTime ? new Date(quickStartTime).toISOString() : null,
         end_time: quickEndTime ? new Date(quickEndTime).toISOString() : null,
@@ -814,6 +821,7 @@ export const ExamBuilderView: React.FC = () => {
         end_time: quickEndTime ? new Date(quickEndTime).toISOString() : null,
         max_attempts: quickMaxAttempts || 1,
         is_public_link: quickIsPublicLink,
+        access_password: quickAccessPassword.trim() || null,
         assign_class_ids: quickAssignClassIds,
         tf_grading_method: quickTfMethod,
         tf_grading_weights: quickTfWeights,
@@ -1114,6 +1122,12 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                               {endTime ? formatScheduleDateTime(endTime) : 'Không giới hạn'}
                             </span>
                           </div>
+                          {exam.settings?.access_password && (
+                            <div className="flex items-center gap-1.5 text-amber-700 font-semibold pt-0.5 truncate">
+                              <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                              <span>Mật khẩu: <span className="font-mono bg-amber-100 px-1 py-0.5 rounded text-[10px]">{exam.settings.access_password}</span></span>
+                            </div>
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -1974,6 +1988,20 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                     </div>
                   </div>
                 </label>
+
+                <div className="pt-1">
+                  <label className="block font-semibold text-slate-700 text-xs mb-1 flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Mật khẩu phòng thi (Tùy chọn)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={quickAccessPassword}
+                    onChange={(e) => setQuickAccessPassword(e.target.value)}
+                    placeholder="Để trống nếu không đặt mật khẩu (VD: 123456 hoặc HOA10)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 placeholder:font-sans placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  />
+                </div>
               </div>
 
               {/* ================= KHU VỰC THIẾT LẬP MA TRẬN MỨC ĐỘ NHẬN THỨC ================= */}
@@ -2663,6 +2691,23 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                     </span>
                   </label>
                 </div>
+              </div>
+
+              <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 space-y-1.5">
+                <label className="block font-semibold text-amber-950 text-xs flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Mật khẩu vào phòng thi (Tùy chọn)</span>
+                </label>
+                <input
+                  type="text"
+                  value={editAccessPassword}
+                  onChange={(e) => setEditAccessPassword(e.target.value)}
+                  placeholder="Để trống nếu không đặt mật khẩu (VD: 123456 hoặc HOA10)"
+                  className="w-full bg-white border border-amber-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 placeholder:font-sans placeholder:text-slate-400 focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                />
+                <p className="text-[11px] text-amber-800">
+                  🔒 Nếu đặt mật khẩu, học sinh chỉ có thể vào làm bài khi nhập đúng mật khẩu này.
+                </p>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
@@ -3619,6 +3664,20 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                         </div>
                       </div>
                     </label>
+
+                    <div className="pt-1">
+                      <label className="block font-semibold text-slate-700 text-[11px] mb-1 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Mật khẩu phòng thi (Tùy chọn)</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={quickAccessPassword}
+                        onChange={(e) => setQuickAccessPassword(e.target.value)}
+                        placeholder="Để trống nếu không đặt mật khẩu (VD: 123456 hoặc HOA10)"
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-800 placeholder:font-sans placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
