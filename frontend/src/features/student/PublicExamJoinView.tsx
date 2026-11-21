@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Clock, BookOpen, Award, Calendar, CheckCircle2, AlertCircle, ArrowRight, UserCheck, School, Eye } from 'lucide-react';
-import { VisitorBadge } from '../../components/common/VisitorBadge';
 
 interface PublicExamDetails {
   id: number;
@@ -167,11 +166,11 @@ export const PublicExamJoinView: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-emerald-50/30 to-indigo-50/30 flex flex-col items-center justify-center p-4 sm:p-6 py-10">
-      <div className="max-w-xl w-full bg-white rounded-3xl border border-slate-200/80 shadow-2xl overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-emerald-50/40 to-indigo-50/40 flex flex-col items-center justify-center p-3 sm:p-6 py-6 sm:py-10">
+      <div className="w-full max-w-xl mx-auto bg-white rounded-3xl border border-slate-200/80 shadow-2xl overflow-hidden">
         {/* Banner Header */}
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-6 sm:p-8 text-white relative">
-          <div className="flex items-center justify-between mb-3">
+        <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-5 sm:p-8 text-white relative">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[11px] font-bold uppercase tracking-wider">
               {exam.subject_name} {exam.grade_name ? `• ${exam.grade_name}` : ''}
             </span>
@@ -191,7 +190,7 @@ export const PublicExamJoinView: React.FC = () => {
           <h1 className="text-xl sm:text-2xl font-black leading-snug tracking-tight">
             {exam.title}
           </h1>
-          <p className="text-xs text-emerald-100 mt-1 flex flex-wrap items-center gap-1.5">
+          <p className="text-xs text-emerald-100 mt-1.5 flex flex-wrap items-center gap-1.5">
             <span>Ra đề: {exam.creator_name}</span>
             <span>•</span>
             <span className="font-mono">Mã: {exam.code}</span>
@@ -204,27 +203,27 @@ export const PublicExamJoinView: React.FC = () => {
         </div>
 
         {/* Nội dung chi tiết bài thi */}
-        <div className="p-6 sm:p-8 space-y-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 text-center">
+        <div className="p-5 sm:p-8 space-y-5 sm:space-y-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-2.5 sm:p-3 text-center">
               <Clock className="w-5 h-5 text-emerald-600 mx-auto mb-1" />
-              <div className="text-[11px] text-slate-400 font-medium">Thời gian</div>
-              <div className="text-xs font-bold text-slate-800 mt-0.5">{exam.duration_minutes} phút</div>
+              <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">Thời gian</div>
+              <div className="text-xs sm:text-sm font-bold text-slate-800 mt-0.5">{exam.duration_minutes} phút</div>
             </div>
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 text-center">
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-2.5 sm:p-3 text-center">
               <BookOpen className="w-5 h-5 text-indigo-600 mx-auto mb-1" />
-              <div className="text-[11px] text-slate-400 font-medium">Số lượng</div>
-              <div className="text-xs font-bold text-slate-800 mt-0.5">{exam.total_questions} câu hỏi</div>
+              <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">Số lượng</div>
+              <div className="text-xs sm:text-sm font-bold text-slate-800 mt-0.5">{exam.total_questions} câu hỏi</div>
             </div>
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 text-center">
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-2.5 sm:p-3 text-center">
               <Award className="w-5 h-5 text-amber-500 mx-auto mb-1" />
-              <div className="text-[11px] text-slate-400 font-medium">Thang điểm</div>
-              <div className="text-xs font-bold text-slate-800 mt-0.5">{exam.total_points} điểm</div>
+              <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">Thang điểm</div>
+              <div className="text-xs sm:text-sm font-bold text-slate-800 mt-0.5">{exam.total_points} điểm</div>
             </div>
-            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 text-center">
+            <div className="bg-slate-50 border border-slate-100 rounded-2xl p-2.5 sm:p-3 text-center">
               <CheckCircle2 className="w-5 h-5 text-teal-600 mx-auto mb-1" />
-              <div className="text-[11px] text-slate-400 font-medium">Hình thức</div>
-              <div className="text-xs font-bold text-slate-800 mt-0.5">Online GDPT</div>
+              <div className="text-[10px] sm:text-[11px] text-slate-400 font-medium">Hình thức</div>
+              <div className="text-xs sm:text-sm font-bold text-slate-800 mt-0.5">Online GDPT</div>
             </div>
           </div>
 
@@ -356,11 +355,6 @@ export const PublicExamJoinView: React.FC = () => {
             </form>
           )}
         </div>
-      </div>
-
-      {/* Bộ đếm lượt truy cập website */}
-      <div className="max-w-xl w-full mt-5">
-        <VisitorBadge variant="bar" />
       </div>
     </div>
   );
