@@ -77,6 +77,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/exams/{exam}/generate-matrix', [ExamController::class, 'generateByMatrix']);
         Route::post('/exams/{exam}/publish', [ExamController::class, 'publish']);
         Route::post('/exams/{exam}/assign', [ExamController::class, 'assign']);
+        Route::post('/exams/{exam}/schedule', [ExamController::class, 'updateSchedule']);
         Route::get('/exams/{exam}/shuffled-offline', [ExamController::class, 'getShuffledOffline']);
 
         // Exam Taking Engine (Thí sinh & Phòng thi trực tuyến)

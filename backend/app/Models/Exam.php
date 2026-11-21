@@ -38,12 +38,43 @@ class Exam extends Model
 
     protected $appends = ['settings'];
 
+    public function getDescriptionAttribute($value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+        if (is_string($value) && str_starts_with(trim($value), '{')) {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded) && (isset($decoded['_settings']) || isset($decoded['_text_description']))) {
+                return !empty($decoded['_text_description']) ? (string) $decoded['_text_description'] : null;
+            }
+        }
+        return $value;
+    }
+
+    public function setDescriptionAttribute($value): void
+    {
+        $raw = $this->attributes['description'] ?? null;
+        $current = [];
+        if (!empty($raw) && is_string($raw) && str_starts_with(trim($raw), '{')) {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded) && isset($decoded['_settings'])) {
+                $current = $decoded;
+                $current['_text_description'] = $value;
+                $this->attributes['description'] = json_encode($current, JSON_UNESCAPED_UNICODE);
+                return;
+            }
+        }
+        $this->attributes['description'] = $value;
+    }
+
     public function getSettingsAttribute(): array
     {
-        if (empty($this->attributes['description'])) {
+        $raw = $this->attributes['description'] ?? null;
+        if (empty($raw)) {
             return [];
         }
-        $decoded = json_decode($this->attributes['description'], true);
+        $decoded = json_decode($raw, true);
         if (is_array($decoded) && isset($decoded['_settings'])) {
             return (array) $decoded['_settings'];
         }
@@ -52,13 +83,14 @@ class Exam extends Model
 
     public function setSettingsAttribute($val): void
     {
+        $raw = $this->attributes['description'] ?? null;
         $current = [];
-        if (!empty($this->attributes['description'])) {
-            $decoded = json_decode($this->attributes['description'], true);
+        if (!empty($raw)) {
+            $decoded = json_decode($raw, true);
             if (is_array($decoded)) {
                 $current = $decoded;
             } else {
-                $current['_text_description'] = $this->attributes['description'];
+                $current['_text_description'] = $raw;
             }
         }
         $current['_settings'] = (array) $val;
@@ -67,14 +99,7 @@ class Exam extends Model
 
     public function getCleanDescriptionAttribute(): string
     {
-        if (empty($this->attributes['description'])) {
-            return '';
-        }
-        $decoded = json_decode($this->attributes['description'], true);
-        if (is_array($decoded)) {
-            return $decoded['_text_description'] ?? '';
-        }
-        return (string) $this->attributes['description'];
+        return $this->getDescriptionAttribute($this->attributes['description'] ?? null) ?? '';
     }
 
     public function creator(): BelongsTo

@@ -195,9 +195,74 @@ export const ExamBuilderView: React.FC = () => {
   // Assign Form State
   const [selectedClassId, setSelectedClassId] = useState('');
   const [assignDurationMinutes, setAssignDurationMinutes] = useState(45);
+  const [assignStartTime, setAssignStartTime] = useState(getInitialDateTime(0));
+  const [assignEndTime, setAssignEndTime] = useState(getInitialDateTime(7));
   const [maxAttempts, setMaxAttempts] = useState(1);
   const [viewScoreType, setViewScoreType] = useState('immediately');
   const [showSolutions, setShowSolutions] = useState(true);
+
+  // Edit Schedule & Deadline Modal
+  const [showScheduleModal, setShowScheduleModal] = useState<Exam | null>(null);
+  const [editStartTime, setEditStartTime] = useState('');
+  const [editEndTime, setEditEndTime] = useState('');
+  const [editMaxAttempts, setEditMaxAttempts] = useState(1);
+  const [editIsPublicLink, setEditIsPublicLink] = useState(true);
+  const [isSubmittingSchedule, setIsSubmittingSchedule] = useState(false);
+
+  const getExamDescription = (desc?: string | null) => {
+    if (!desc) return 'Chưa có mô tả chi tiết';
+    if (typeof desc === 'string' && desc.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(desc);
+        if (parsed._text_description) return parsed._text_description;
+        return 'Chưa có mô tả chi tiết';
+      } catch {
+        return desc;
+      }
+    }
+    return desc;
+  };
+
+  const handleOpenScheduleModal = (exam: Exam) => {
+    setShowScheduleModal(exam);
+    const startTime = exam.settings?.start_time || exam.assignments?.[0]?.start_time;
+    const endTime = exam.settings?.end_time || exam.assignments?.[0]?.end_time;
+    setEditStartTime(startTime ? new Date(startTime).toISOString().slice(0, 16) : getInitialDateTime(0));
+    setEditEndTime(endTime ? new Date(endTime).toISOString().slice(0, 16) : getInitialDateTime(7));
+    setEditMaxAttempts(exam.settings?.max_attempts || exam.assignments?.[0]?.max_attempts || 1);
+    setEditIsPublicLink(exam.settings?.is_public_link !== false);
+  };
+
+  const handleQuickExtend = (hours: number) => {
+    const base = editEndTime ? new Date(editEndTime) : new Date();
+    const newDate = new Date(Math.max(base.getTime(), Date.now()) + hours * 3600 * 1000);
+    newDate.setMinutes(newDate.getMinutes() - newDate.getTimezoneOffset());
+    setEditEndTime(newDate.toISOString().slice(0, 16));
+  };
+
+  const handleUpdateSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showScheduleModal) return;
+    setIsSubmittingSchedule(true);
+    try {
+      const payload = {
+        start_time: editStartTime ? new Date(editStartTime).toISOString() : null,
+        end_time: editEndTime ? new Date(editEndTime).toISOString() : null,
+        max_attempts: editMaxAttempts,
+        is_public_link: editIsPublicLink,
+      };
+      const res: any = await api.post(`/exams/${showScheduleModal.id}/schedule`, payload);
+      if (res.success) {
+        alert('🎉 Đã cập nhật lịch thi & thời hạn nộp bài thành công!');
+        setShowScheduleModal(null);
+        fetchExams();
+      }
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Có lỗi khi cập nhật lịch thi.');
+    } finally {
+      setIsSubmittingSchedule(false);
+    }
+  };
 
   const navigate = useNavigate();
 
@@ -813,6 +878,15 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
     }
   };
 
+  const handleOpenAssignModal = (exam: Exam) => {
+    setShowAssignModal(exam);
+    const startTime = exam.settings?.start_time || exam.assignments?.[0]?.start_time;
+    const endTime = exam.settings?.end_time || exam.assignments?.[0]?.end_time;
+    setAssignStartTime(startTime ? new Date(startTime).toISOString().slice(0, 16) : getInitialDateTime(0));
+    setAssignEndTime(endTime ? new Date(endTime).toISOString().slice(0, 16) : getInitialDateTime(7));
+    setSelectedClassId('');
+  };
+
   // Submit giao đề cho lớp
   const handleAssignExam = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -821,8 +895,8 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
     try {
       const payload = {
         class_ids: [Number(selectedClassId)],
-        start_time: new Date().toISOString(),
-        end_time: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // Mở 7 ngày
+        start_time: assignStartTime ? new Date(assignStartTime).toISOString() : new Date().toISOString(),
+        end_time: assignEndTime ? new Date(assignEndTime).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         max_attempts: maxAttempts,
         view_score_type: viewScoreType,
         show_solutions: showSolutions,
@@ -914,7 +988,7 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                   <span className="font-mono text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
                     {exam.code}
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
                         exam.status === 'published'
@@ -924,6 +998,13 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                     >
                       {exam.status === 'published' ? 'Đã xuất bản' : 'Bản nháp'}
                     </span>
+                    <button
+                      onClick={() => navigate(`/teacher/exams/${exam.id}/analytics`)}
+                      className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                      title="Xem phổ điểm và phân tích câu sai"
+                    >
+                      <BarChart2 className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={() => handleDeleteExam(exam.id, exam.title)}
                       className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
@@ -942,7 +1023,7 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                   {exam.title}
                 </h3>
                 <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                  {exam.description || 'Chưa có mô tả chi tiết'}
+                  {getExamDescription(exam.description)}
                 </p>
 
                 {/* Thông tin ngày thi, giờ thi & trạng thái mở đề */}
@@ -993,6 +1074,19 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                           </div>
                         </div>
                       ) : null}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenScheduleModal(exam);
+                        }}
+                        className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 transition-colors cursor-pointer"
+                        title="Chỉnh sửa ngày giờ mở thi, gia hạn nộp bài hoặc đổi số lần làm bài"
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Chỉnh Lịch Thi & Hạn Nộp Bài</span>
+                      </button>
                     </div>
                   );
                 })()}
@@ -1049,7 +1143,16 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowAssignModal(exam)}
+                    onClick={() => handleOpenScheduleModal(exam)}
+                    className="flex items-center justify-center gap-1 px-2 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold border border-amber-200 transition-colors cursor-pointer"
+                    title="Cài đặt ngày giờ bắt đầu, hạn chót nộp bài và gia hạn thời gian làm bài"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Hạn Nộp</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenAssignModal(exam)}
                     className="flex items-center justify-center gap-1 px-2 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-xs shadow-indigo-600/10"
                     title="Giao đề thi cho lớp học"
                   >
@@ -1064,15 +1167,6 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                   >
                     <Printer className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
                     <span>Đảo Đề</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/teacher/exams/${exam.id}/analytics`)}
-                    className="flex items-center justify-center gap-1 px-2 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
-                    title="Xem phổ điểm và phân tích câu sai"
-                  >
-                    <BarChart2 className="w-3.5 h-3.5 shrink-0" />
-                    <span>Phổ Điểm</span>
                   </button>
                 </div>
               </div>
@@ -2333,6 +2427,29 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Bắt đầu mở thi *</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={assignStartTime}
+                    onChange={(e) => setAssignStartTime(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Hạn chót nộp bài *</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={assignEndTime}
+                    onChange={(e) => setAssignEndTime(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
                   <label className="block font-semibold text-slate-700 mb-1">Số lần được phép thi</label>
                   <input
                     type="number"
@@ -2382,6 +2499,158 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold shadow-xs"
                 >
                   Xác nhận giao đề
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL CÀI ĐẶT LỊCH THI & HẠN NỘP BÀI ================= */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">
+                    Cài Đặt Lịch Thi & Hạn Nộp Bài
+                  </h3>
+                  <p className="text-[11px] text-slate-500 truncate max-w-[280px] sm:max-w-xs">
+                    {showScheduleModal.title}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScheduleModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateSchedule} className="space-y-4 text-xs">
+              <div className="bg-indigo-50/70 p-3 rounded-xl border border-indigo-200/80 text-[11px] text-indigo-900 leading-relaxed">
+                Thầy/Cô có thể gia hạn thêm thời gian nộp bài, mở lại đề thi đã hết hạn hoặc điều chỉnh số lần làm bài cho học sinh bất kỳ lúc nào.
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Bắt đầu mở thi (từ ngày/giờ)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editStartTime}
+                    onChange={(e) => setEditStartTime(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Hạn chót nộp bài (đến ngày/giờ)
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={editEndTime}
+                    onChange={(e) => setEditEndTime(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* Nút gia hạn nhanh */}
+              <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                <span className="text-[11px] font-semibold text-slate-600 block">
+                  ⚡ Gia hạn nhanh hạn chót nộp bài:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickExtend(0.5)}
+                    className="px-2.5 py-1 bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 rounded text-[11px] font-semibold text-slate-700 cursor-pointer shadow-xs"
+                  >
+                    +30 phút
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickExtend(1)}
+                    className="px-2.5 py-1 bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 rounded text-[11px] font-semibold text-slate-700 cursor-pointer shadow-xs"
+                  >
+                    +1 giờ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickExtend(24)}
+                    className="px-2.5 py-1 bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 rounded text-[11px] font-semibold text-slate-700 cursor-pointer shadow-xs"
+                  >
+                    +1 ngày
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickExtend(72)}
+                    className="px-2.5 py-1 bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 rounded text-[11px] font-semibold text-slate-700 cursor-pointer shadow-xs"
+                  >
+                    +3 ngày
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickExtend(168)}
+                    className="px-2.5 py-1 bg-white border border-slate-200 hover:border-indigo-400 hover:text-indigo-600 rounded text-[11px] font-semibold text-slate-700 cursor-pointer shadow-xs"
+                  >
+                    +7 ngày
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Số lần làm bài tối đa
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={editMaxAttempts}
+                    onChange={(e) => setEditMaxAttempts(Number(e.target.value) || 1)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800"
+                  />
+                </div>
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editIsPublicLink}
+                      onChange={(e) => setEditIsPublicLink(e.target.checked)}
+                      className="rounded text-indigo-600"
+                    />
+                    <span className="font-semibold text-slate-700 text-xs">
+                      Bật Link thi cho Học sinh tự do
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowScheduleModal(null)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingSchedule}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>{isSubmittingSchedule ? 'Đang lưu...' : 'Lưu Cài Đặt Lịch Thi'}</span>
                 </button>
               </div>
             </form>

@@ -380,6 +380,68 @@ class ExamController extends Controller
         ]);
     }
 
+    public function updateSchedule(Request $request, Exam $exam): JsonResponse
+    {
+        $user = $request->user();
+        if (!$user->isSuperAdmin() && $exam->creator_id !== $user->id) {
+            return response()->json(['success' => false, 'message' => 'Bạn không có quyền chỉnh sửa thời gian đề thi này.'], 403);
+        }
+
+        $validated = $request->validate([
+            'start_time' => 'nullable|date',
+            'end_time' => 'nullable|date',
+            'max_attempts' => 'nullable|integer|min:1|max:10',
+            'is_public_link' => 'nullable|boolean',
+        ]);
+
+        $settings = $exam->settings ?? [];
+        if (array_key_exists('start_time', $validated)) {
+            $settings['start_time'] = $validated['start_time'];
+        }
+        if (array_key_exists('end_time', $validated)) {
+            $settings['end_time'] = $validated['end_time'];
+        }
+        if (array_key_exists('max_attempts', $validated)) {
+            $settings['max_attempts'] = (int) $validated['max_attempts'];
+        }
+        if (array_key_exists('is_public_link', $validated)) {
+            $settings['is_public_link'] = (bool) $validated['is_public_link'];
+        }
+        $exam->settings = $settings;
+        $exam->save();
+
+        $startTime = !empty($settings['start_time']) ? new \DateTime($settings['start_time']) : now();
+        $endTime = !empty($settings['end_time']) ? new \DateTime($settings['end_time']) : now()->addDays(7);
+
+        // Cập nhật tất cả assignments hiện có của đề thi này
+        $exam->assignments()->update([
+            'start_time' => $startTime,
+            'end_time' => $endTime,
+            'max_attempts' => $settings['max_attempts'] ?? 1,
+        ]);
+
+        // Nếu bật link công khai và chưa có assignment công khai (class_id IS NULL) thì tạo mới
+        if (!empty($settings['is_public_link']) && $exam->assignments()->whereNull('class_id')->count() === 0) {
+            ExamAssignment::create([
+                'exam_id' => $exam->id,
+                'class_id' => null,
+                'student_id' => null,
+                'assigned_by' => $exam->creator_id,
+                'start_time' => $startTime,
+                'end_time' => $endTime,
+                'max_attempts' => $settings['max_attempts'] ?? 1,
+                'view_score_type' => 'immediately',
+                'show_solutions' => true,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Cập nhật thời gian làm bài & hạn nộp thành công!',
+            'data' => $exam->load(['subject', 'grade', 'assignments']),
+        ]);
+    }
+
     public function quickCreate(Request $request): JsonResponse
     {
         $validated = $request->validate([
