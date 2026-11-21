@@ -1059,7 +1059,11 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                       </div>
 
                       {hasSchedule ? (
-                        <div className="bg-slate-50/80 rounded-lg p-2 text-[11px] text-slate-600 space-y-0.5">
+                        <div
+                          onClick={() => handleOpenScheduleModal(exam)}
+                          className="bg-slate-50/80 hover:bg-amber-50/50 transition-colors cursor-pointer rounded-lg p-2 text-[11px] text-slate-600 space-y-0.5 border border-transparent hover:border-amber-200"
+                          title="Bấm để chỉnh sửa lịch thi & hạn nộp bài"
+                        >
                           <div className="flex items-center gap-1.5 truncate">
                             <span className="text-slate-400 font-medium shrink-0">Bắt đầu:</span>
                             <span className="font-semibold text-slate-700 truncate">
@@ -1074,19 +1078,6 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                           </div>
                         </div>
                       ) : null}
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenScheduleModal(exam);
-                        }}
-                        className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 transition-colors cursor-pointer"
-                        title="Chỉnh sửa ngày giờ mở thi, gia hạn nộp bài hoặc đổi số lần làm bài"
-                      >
-                        <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-                        <span>Chỉnh Lịch Thi & Hạn Nộp Bài</span>
-                      </button>
                     </div>
                   );
                 })()}
