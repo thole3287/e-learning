@@ -704,7 +704,7 @@ class ExamController extends Controller
             'message' => 'Vào phòng thi thành công',
             'data' => [
                 'assignment_id' => $assignment->id,
-                'attempt_id' => $payload['attempt']['id'],
+                'attempt_id' => $payload['attempt_id'] ?? null,
                 'room_data' => $payload,
             ],
         ]);
@@ -773,11 +773,11 @@ class ExamController extends Controller
                 'token' => $token,
                 'user' => [
                     'id' => $guestUser->id,
-                    'name' => $guestUser->name,
+                    'name' => $guestUser->full_name ?? $guestUser->username,
                     'role' => 'student',
                 ],
                 'assignment_id' => $assignment->id,
-                'attempt_id' => $payload['attempt']['id'],
+                'attempt_id' => $payload['attempt_id'] ?? null,
                 'room_data' => $payload,
             ],
         ]);
