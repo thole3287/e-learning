@@ -16,6 +16,8 @@ class ReportAnalyticsService
      */
     public function getDashboardStats(User $user): array
     {
+        $visitStats = (new VisitTrackerService())->getStats();
+
         if ($user->isSuperAdmin()) {
             return [
                 'total_schools' => DB::table('schools')->count(),
@@ -25,6 +27,7 @@ class ReportAnalyticsService
                 'total_questions' => DB::table('questions')->whereNull('deleted_at')->count(),
                 'total_exams' => DB::table('exams')->whereNull('deleted_at')->count(),
                 'total_attempts' => DB::table('exam_attempts')->count(),
+                'visit_stats' => $visitStats,
                 'recent_attempts' => ExamAttempt::with(['student', 'exam'])
                     ->latest()
                     ->limit(5)
@@ -66,6 +69,7 @@ class ReportAnalyticsService
                     ->where('start_time', '<=', now())
                     ->where('end_time', '>=', now())
                     ->count(),
+                'visit_stats' => $visitStats,
             ];
         }
 

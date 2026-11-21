@@ -507,6 +507,12 @@ class ExamController extends Controller
         $endTime = $assignment?->end_time ?? now()->addDays(7);
         $isOpen = $now->gte($startTime) && $now->lte($endTime);
 
+        // Ghi nhận lượt xem / truy cập đề thi
+        $settings = $exam->settings ?? [];
+        $settings['views_count'] = ($settings['views_count'] ?? 0) + 1;
+        $exam->settings = $settings;
+        $exam->save();
+
         return response()->json([
             'success' => true,
             'data' => [
@@ -519,12 +525,13 @@ class ExamController extends Controller
                 'duration_minutes' => $exam->duration_minutes,
                 'total_points' => (float) $exam->total_points,
                 'total_questions' => $exam->examQuestions()->count(),
+                'views_count' => $settings['views_count'],
                 'start_time' => $startTime->toISOString(),
                 'end_time' => $endTime->toISOString(),
                 'is_open' => $isOpen,
                 'status_label' => $now->lt($startTime) ? 'upcoming' : ($isOpen ? 'open' : 'closed'),
                 'assignment_id' => $assignment?->id,
-                'settings' => $exam->settings,
+                'settings' => $settings,
             ],
         ]);
     }

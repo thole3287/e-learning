@@ -900,17 +900,21 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                   {exam.description || 'Chưa có mô tả chi tiết'}
                 </p>
 
-                <div className="flex items-center gap-4 text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100">
+                <div className="flex flex-wrap items-center gap-3.5 text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100">
                   <div className="flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-slate-400" />
                     <span>{exam.duration_minutes} phút</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{exam.exam_questions_count || 0} câu hỏi</span>
+                    <span>{exam.exam_questions_count || 0} câu</span>
                   </div>
-                  <div className="flex items-center gap-1.5 font-semibold text-slate-700">
-                    <span>Thang {exam.total_points} đ</span>
+                  <div className="flex items-center gap-1.5 text-indigo-600 font-medium" title="Lượt xem / truy cập đề thi">
+                    <Eye className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>{exam.settings?.views_count || 0} xem</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 font-semibold text-slate-700 ml-auto">
+                    <span>Thang {exam.total_points}đ</span>
                   </div>
                 </div>
               </div>

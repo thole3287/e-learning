@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { Users, GraduationCap, FileQuestion, ClipboardList, CheckCircle2, TrendingUp, School } from 'lucide-react';
+import { VisitorBadge } from '../../components/common/VisitorBadge';
 
 export const AdminDashboardView: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
@@ -60,6 +61,9 @@ export const AdminDashboardView: React.FC = () => {
           );
         })}
       </div>
+
+      {/* Thống kê Lượt truy cập Hệ thống */}
+      <VisitorBadge variant="card" />
 
       {/* Danh sách lượt nộp bài gần đây */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">

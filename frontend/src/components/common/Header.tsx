@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { ShieldCheck, UserCheck, Menu } from 'lucide-react';
+import { VisitorBadge } from './VisitorBadge';
 
 interface HeaderProps {
   title?: string;
@@ -56,6 +57,7 @@ export const Header: React.FC<HeaderProps> = ({ title, onToggleSidebar }) => {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        <VisitorBadge variant="pill" className="hidden md:inline-flex" />
         {getRoleBadge()}
         <div className="hidden sm:block h-4 w-px bg-slate-200 mx-1" />
         <div className="hidden sm:block text-right">

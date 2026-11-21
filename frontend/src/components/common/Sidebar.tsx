@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { VisitorBadge } from './VisitorBadge';
 import {
   LayoutDashboard,
   Users,
@@ -124,9 +125,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           })}
         </nav>
 
-        {/* User Profile & Logout */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/20">
-          <div className="flex items-center gap-3 mb-3 px-2">
+        {/* User Profile, Visit Counter & Logout */}
+        <div className="p-4 border-t border-slate-800 bg-slate-950/20 space-y-3">
+          <VisitorBadge variant="sidebar" />
+
+          <div className="flex items-center gap-3 px-1">
             <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center font-bold text-xs text-white shrink-0">
               {user.full_name?.charAt(0) || 'U'}
             </div>

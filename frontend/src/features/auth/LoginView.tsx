@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import { Lock, Mail, AlertCircle, ArrowRight } from 'lucide-react';
+import { VisitorBadge } from '../../components/common/VisitorBadge';
 
 export const LoginView: React.FC = () => {
   const [loginInput, setLoginInput] = useState('');
@@ -107,6 +108,11 @@ export const LoginView: React.FC = () => {
             <ArrowRight className="w-4 h-4" />
           </button>
         </form>
+      </div>
+
+      {/* Thống kê Lượt truy cập */}
+      <div className="mt-8 max-w-lg w-full">
+        <VisitorBadge variant="bar" />
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\SchoolClassController;
 use App\Http\Controllers\Api\V1\SubjectController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\Api\V1\VisitController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -19,10 +20,12 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
 
-    // 1. Authentication & Public Exam Access
+    // 1. Authentication & Public Exam Access & Visit Counter
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::get('/exams/public/{code}', [ExamController::class, 'getPublicExamInfo']);
     Route::post('/exams/public/{code}/guest-join', [ExamController::class, 'guestJoinPublicExam']);
+    Route::post('/visits/record', [VisitController::class, 'record']);
+    Route::get('/visits/stats', [VisitController::class, 'stats']);
 
     // Protected Routes (Yêu cầu Bearer Token Sanctum)
     Route::middleware('auth:sanctum')->group(function () {
@@ -31,6 +34,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::put('/auth/change-password', [AuthController::class, 'changePassword']);
+        Route::post('/visits/baseline', [VisitController::class, 'updateBaseline']);
 
         // Dashboard & Analytics
         Route::get('/reports/dashboard', [ReportController::class, 'dashboard']);

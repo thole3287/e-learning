@@ -51,6 +51,8 @@ export interface Exam {
     tf_grading_weights?: number[];
     is_public_link?: boolean;
     max_attempts?: number;
+    views_count?: number;
+    [key: string]: any;
   };
 }
 

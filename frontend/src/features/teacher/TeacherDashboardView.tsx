@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Users, GraduationCap, FileQuestion, ClipboardList, Send, Plus, BarChart2 } from 'lucide-react';
+import { VisitorBadge } from '../../components/common/VisitorBadge';
 
 export const TeacherDashboardView: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
@@ -95,6 +96,9 @@ export const TeacherDashboardView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Thống kê Lượt truy cập Website */}
+      <VisitorBadge variant="card" />
 
       {/* Thông tin phòng thi đang mở */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

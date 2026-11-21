@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
-import { Clock, BookOpen, Award, Calendar, CheckCircle2, AlertCircle, ArrowRight, UserCheck, School } from 'lucide-react';
+import { Clock, BookOpen, Award, Calendar, CheckCircle2, AlertCircle, ArrowRight, UserCheck, School, Eye } from 'lucide-react';
+import { VisitorBadge } from '../../components/common/VisitorBadge';
 
 interface PublicExamDetails {
   id: number;
@@ -13,6 +14,7 @@ interface PublicExamDetails {
   duration_minutes: number;
   total_points: number;
   total_questions: number;
+  views_count?: number;
   start_time: string;
   end_time: string;
   is_open: boolean;
@@ -189,10 +191,15 @@ export const PublicExamJoinView: React.FC = () => {
           <h1 className="text-xl sm:text-2xl font-black leading-snug tracking-tight">
             {exam.title}
           </h1>
-          <p className="text-xs text-emerald-100 mt-1 flex items-center gap-1.5">
+          <p className="text-xs text-emerald-100 mt-1 flex flex-wrap items-center gap-1.5">
             <span>Ra đề: {exam.creator_name}</span>
             <span>•</span>
             <span className="font-mono">Mã: {exam.code}</span>
+            <span>•</span>
+            <span className="inline-flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded-full text-[11px] font-semibold">
+              <Eye className="w-3 h-3" />
+              <span>{exam.views_count || 1} lượt xem</span>
+            </span>
           </p>
         </div>
 
@@ -318,6 +325,11 @@ export const PublicExamJoinView: React.FC = () => {
             </form>
           )}
         </div>
+      </div>
+
+      {/* Bộ đếm lượt truy cập website */}
+      <div className="max-w-xl w-full mt-5">
+        <VisitorBadge variant="bar" />
       </div>
     </div>
   );
