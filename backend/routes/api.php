@@ -19,8 +19,10 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
 
-    // 1. Authentication (Public)
+    // 1. Authentication & Public Exam Access
     Route::post('/auth/login', [AuthController::class, 'login']);
+    Route::get('/exams/public/{code}', [ExamController::class, 'getPublicExamInfo']);
+    Route::post('/exams/public/{code}/guest-join', [ExamController::class, 'guestJoinPublicExam']);
 
     // Protected Routes (Yêu cầu Bearer Token Sanctum)
     Route::middleware('auth:sanctum')->group(function () {
@@ -65,6 +67,7 @@ Route::prefix('v1')->group(function () {
 
         // Exam Management
         Route::post('/exams/quick-create', [ExamController::class, 'quickCreate']);
+        Route::post('/exams/public/{code}/join', [ExamController::class, 'joinPublicExam']);
         Route::apiResource('exams', ExamController::class);
         Route::post('/exams/{exam}/questions', [ExamController::class, 'addQuestions']);
         Route::post('/exams/{exam}/generate-matrix', [ExamController::class, 'generateByMatrix']);

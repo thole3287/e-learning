@@ -53,7 +53,7 @@ class ExamGradingService
                 }
 
                 // Tiến hành chấm điểm theo dạng câu hỏi
-                $result = $this->evaluateQuestion($question, $answer, $allocatedPoints);
+                $result = $this->evaluateQuestion($question, $answer, $allocatedPoints, $exam);
 
                 if ($result['is_correct']) {
                     $totalCorrect++;
@@ -85,7 +85,7 @@ class ExamGradingService
     /**
      * Thuật toán chấm điểm theo dạng câu hỏi
      */
-    public function evaluateQuestion(Question $question, StudentAnswer $answer, float $allocatedPoints): array
+    public function evaluateQuestion(Question $question, StudentAnswer $answer, float $allocatedPoints, $exam = null): array
     {
         $options = $question->options;
         $correctOptions = $options->where('is_correct', true);
@@ -102,7 +102,7 @@ class ExamGradingService
                 ];
 
             case 'true_false':
-                // Phần II: Đúng / Sai GDPT 2018
+                // Phần II: Đúng / Sai GDPT 2018 & Tùy biến % theo cấu hình đề thi
                 // Mỗi câu hỏi có các ý (thường là 4 ý a, b, c, d). Học sinh chọn Đúng hoặc Sai cho mỗi ý.
                 $totalStatements = $options->count();
                 if ($totalStatements === 0) {
@@ -141,17 +141,13 @@ class ExamGradingService
                     }
                 }
 
-                // Điểm theo quy chế GDPT 2018 (Chuẩn Bộ GD&ĐT):
-                // - Đúng 1 ý: 0.10 điểm (10% điểm câu)
-                // - Đúng 2 ý: 0.25 điểm (25% điểm câu)
-                // - Đúng 3 ý: 0.50 điểm (50% điểm câu)
-                // - Đúng 4 ý: 1.00 điểm (100% điểm câu)
+                // Điểm theo cấu hình (Mặc định: Chuẩn GDPT 2018 Bộ GD&ĐT: [10, 25, 50, 100])
+                $tfWeights = $exam?->settings['tf_grading_weights'] ?? [10, 25, 50, 100];
                 $fraction = 0.0;
-                if ($totalStatements === 4) {
-                    if ($correctCount === 1) $fraction = 0.10;
-                    elseif ($correctCount === 2) $fraction = 0.25;
-                    elseif ($correctCount === 3) $fraction = 0.50;
-                    elseif ($correctCount === 4) $fraction = 1.00;
+                if ($totalStatements === 4 && is_array($tfWeights) && count($tfWeights) >= 4) {
+                    if ($correctCount >= 1 && $correctCount <= 4) {
+                        $fraction = ((float) ($tfWeights[$correctCount - 1] ?? 0)) / 100.0;
+                    }
                 } else {
                     $fraction = $totalStatements > 0 ? ($correctCount / $totalStatements) : 0.0;
                 }

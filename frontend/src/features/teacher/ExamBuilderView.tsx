@@ -32,6 +32,8 @@ import {
   FileCheck,
   Code,
   GraduationCap,
+  Link,
+  Calendar,
 } from 'lucide-react';
 
 export const ExamBuilderView: React.FC = () => {
@@ -72,6 +74,61 @@ export const ExamBuilderView: React.FC = () => {
   const [isSubmittingQuickExam, setIsSubmittingQuickExam] = useState(false);
   const [quickInputMode, setQuickInputMode] = useState<'file' | 'text'>('file');
   const [quickRawText, setQuickRawText] = useState('');
+
+  // Lịch làm bài Online & Thang điểm Đúng/Sai & Chủ đề cho Tạo Đề Nhanh
+  const getInitialDateTime = (addDays = 0) => {
+    const d = new Date();
+    d.setDate(d.getDate() + addDays);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  };
+
+  const [quickStartTime, setQuickStartTime] = useState(getInitialDateTime(0));
+  const [quickEndTime, setQuickEndTime] = useState(getInitialDateTime(7));
+  const [quickMaxAttempts, setQuickMaxAttempts] = useState(1);
+  const [quickIsPublicLink, setQuickIsPublicLink] = useState(true);
+  const [quickTfMethod, setQuickTfMethod] = useState<'moet' | 'equal' | 'custom'>('moet');
+  const [quickTfWeights, setQuickTfWeights] = useState<number[]>([10, 25, 50, 100]);
+  const [quickChapterId, setQuickChapterId] = useState<string | number>('');
+  const [quickChapters, setQuickChapters] = useState<any[]>([]);
+
+  // Modal thông báo thành công kèm Link làm bài
+  const [createdExamSuccess, setCreatedExamSuccess] = useState<any>(null);
+  const [copiedExamId, setCopiedExamId] = useState<number | null>(null);
+
+  const handleCopyExamLink = (exam: { code: string; id: number }) => {
+    const origin = window.location.origin;
+    const link = `${origin}/exam/${exam.code}`;
+    navigator.clipboard.writeText(link);
+    setCopiedExamId(exam.id);
+    setTimeout(() => setCopiedExamId(null), 2500);
+  };
+
+  const fetchQuickChapters = async (subId: number) => {
+    try {
+      const res: any = await api.get(`/subjects/${subId}/chapters`);
+      if (res.success && res.data) {
+        setQuickChapters(res.data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (quickSubjectId) {
+      fetchQuickChapters(quickSubjectId);
+    }
+  }, [quickSubjectId]);
+
+  const handleTfMethodChange = (method: 'moet' | 'equal' | 'custom') => {
+    setQuickTfMethod(method);
+    if (method === 'moet') {
+      setQuickTfWeights([10, 25, 50, 100]);
+    } else if (method === 'equal') {
+      setQuickTfWeights([25, 50, 75, 100]);
+    }
+  };
 
   // Offline Shuffling & Word Export Modal
   const [showOfflineModal, setShowOfflineModal] = useState<Exam | null>(null);
@@ -553,15 +610,22 @@ export const ExamBuilderView: React.FC = () => {
         shuffle_questions: quickShuffleQuestions,
         shuffle_options: quickShuffleOptions,
         save_to_bank: quickSaveToBank,
+        chapter_id: quickChapterId ? Number(quickChapterId) : null,
+        tf_grading_method: quickTfMethod,
+        tf_grading_weights: quickTfWeights,
+        is_public_link: quickIsPublicLink,
+        max_attempts: quickMaxAttempts,
+        start_time: quickStartTime ? new Date(quickStartTime).toISOString() : null,
+        end_time: quickEndTime ? new Date(quickEndTime).toISOString() : null,
         questions: selectedQuestions,
         assign_class_ids: quickAssignClassIds,
       };
 
       const res: any = await api.post('/exams/quick-create', payload);
-      if (res.success) {
-        alert('🎉 Tạo đề thi thành công! Câu hỏi đã tự động lưu vào ngân hàng đề.');
+      if (res.success && res.data) {
         setShowQuickWordModal(false);
         setParsedExam(null);
+        setCreatedExamSuccess(res.data);
         fetchExams();
       }
     } catch (err: any) {
@@ -852,43 +916,60 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
               </div>
 
               {/* Action buttons */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 border-t border-slate-100">
+              <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                {/* Nút Sao Chép Link Đề Thi cho Học Sinh */}
                 <button
                   type="button"
-                  onClick={() => handleOpenPreview(exam)}
-                  className="flex items-center justify-center gap-1 px-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                  title="Xem trước nội dung câu hỏi và đáp án của đề thi"
+                  onClick={() => handleCopyExamLink(exam)}
+                  className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                    copiedExamId === exam.id
+                      ? 'bg-emerald-700 text-white'
+                      : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white'
+                  }`}
+                  title="Sao chép đường link phòng thi trực tuyến để gửi qua Zalo, Messenger cho học sinh làm bài tự do"
                 >
-                  <Eye className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span>Xem</span>
+                  <Link className="w-3.5 h-3.5 shrink-0" />
+                  <span>{copiedExamId === exam.id ? '✓ Đã Sao Chép Link Làm Bài' : 'Sao Chép Link Làm Bài Cho HS'}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAssignModal(exam)}
-                  className="flex items-center justify-center gap-1 px-2 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-xs shadow-indigo-600/10"
-                  title="Giao đề thi cho lớp học"
-                >
-                  <Send className="w-3.5 h-3.5 shrink-0" />
-                  <span>Giao Lớp</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleOpenOfflineModal(exam)}
-                  className="flex items-center justify-center gap-1 px-2 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold border border-emerald-200 transition-colors cursor-pointer"
-                  title="Đảo đề thi & xuất file Word offline (nhiều mã đề kèm đáp án)"
-                >
-                  <Printer className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
-                  <span>Đảo Đề Word</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/teacher/exams/${exam.id}/analytics`)}
-                  className="flex items-center justify-center gap-1 px-2 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
-                  title="Xem phổ điểm và phân tích câu sai"
-                >
-                  <BarChart2 className="w-3.5 h-3.5 shrink-0" />
-                  <span>Phổ Điểm</span>
-                </button>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenPreview(exam)}
+                    className="flex items-center justify-center gap-1 px-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                    title="Xem trước nội dung câu hỏi và đáp án của đề thi"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    <span>Xem</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAssignModal(exam)}
+                    className="flex items-center justify-center gap-1 px-2 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-xs shadow-indigo-600/10"
+                    title="Giao đề thi cho lớp học"
+                  >
+                    <Send className="w-3.5 h-3.5 shrink-0" />
+                    <span>Giao Lớp</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenOfflineModal(exam)}
+                    className="flex items-center justify-center gap-1 px-2 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold border border-emerald-200 transition-colors cursor-pointer"
+                    title="Đảo đề thi & xuất file Word offline (nhiều mã đề kèm đáp án)"
+                  >
+                    <Printer className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                    <span>Đảo Đề</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/teacher/exams/${exam.id}/analytics`)}
+                    className="flex items-center justify-center gap-1 px-2 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
+                    title="Xem phổ điểm và phân tích câu sai"
+                  >
+                    <BarChart2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Phổ Điểm</span>
+                  </button>
+                </div>
               </div>
             </div>
           ))
@@ -2267,6 +2348,25 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                     </div>
                   </div>
 
+                  {/* CHỌN CHỦ ĐỀ / CHƯƠNG LƯU VÀO NGÂN HÀNG */}
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Chủ đề / Chương (Phân loại vào Ngân hàng câu hỏi)
+                    </label>
+                    <select
+                      value={quickChapterId}
+                      onChange={(e) => setQuickChapterId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium"
+                    >
+                      <option value="">-- Chủ đề chung / Không phân loại --</option>
+                      {quickChapters.map((ch) => (
+                        <option key={ch.id} value={ch.id}>
+                          📖 {ch.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* TÍNH NĂNG TẠO ĐỀ CON (THEO CHUẨN AZOTA) */}
                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
@@ -2457,6 +2557,206 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                       </div>
                     </div>
                   )}
+
+                  {/* CẤU HÌNH TÍNH ĐIỂM ĐÚNG / SAI (PHẦN II) */}
+                  <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200/80 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-950 text-xs">
+                        <CheckCircle2 className="w-4 h-4 text-amber-600" />
+                        <span>Quy Tắc Tính Điểm Câu Đúng / Sai (Phần II - 4 ý a, b, c, d)</span>
+                      </div>
+                      <span className="text-[11px] text-amber-700 font-medium">
+                        {(parsedExam.groups?.part2?.length || 0)} câu Đúng/Sai trong đề gốc
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleTfMethodChange('moet')}
+                        className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                          quickTfMethod === 'moet'
+                            ? 'bg-white border-amber-500 ring-1 ring-amber-500 shadow-xs'
+                            : 'bg-white/60 border-amber-200/70 hover:bg-white'
+                        }`}
+                      >
+                        <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                          <span>Chuẩn Bộ GD&ĐT (2018)</span>
+                          {quickTfMethod === 'moet' && <Check className="w-3.5 h-3.5 text-amber-600" />}
+                        </div>
+                        <div className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                          1 ý: 10% (0.1đ/1đ) • 2 ý: 25% (0.25đ)<br />
+                          3 ý: 50% (0.5đ) • 4 ý: 100% (1.0đ)
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleTfMethodChange('equal')}
+                        className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                          quickTfMethod === 'equal'
+                            ? 'bg-white border-amber-500 ring-1 ring-amber-500 shadow-xs'
+                            : 'bg-white/60 border-amber-200/70 hover:bg-white'
+                        }`}
+                      >
+                        <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                          <span>Chia Đều (25%/ý)</span>
+                          {quickTfMethod === 'equal' && <Check className="w-3.5 h-3.5 text-amber-600" />}
+                        </div>
+                        <div className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                          1 ý: 25% (0.25đ) • 2 ý: 50% (0.5đ)<br />
+                          3 ý: 75% (0.75đ) • 4 ý: 100% (1.0đ)
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleTfMethodChange('custom')}
+                        className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                          quickTfMethod === 'custom'
+                            ? 'bg-white border-amber-500 ring-1 ring-amber-500 shadow-xs'
+                            : 'bg-white/60 border-amber-200/70 hover:bg-white'
+                        }`}
+                      >
+                        <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                          <span>Tự Nhập % Điểm</span>
+                          {quickTfMethod === 'custom' && <Check className="w-3.5 h-3.5 text-amber-600" />}
+                        </div>
+                        <div className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                          Tự do chỉnh % điểm cho 1, 2, 3, 4 ý theo yêu cầu của Thầy/Cô
+                        </div>
+                      </button>
+                    </div>
+
+                    {quickTfMethod === 'custom' && (
+                      <div className="mt-2 pt-2 border-t border-amber-200/80 flex flex-wrap items-center gap-3 bg-white p-2.5 rounded-lg">
+                        <span className="text-[11px] font-semibold text-slate-700">Tỷ lệ % khi đúng:</span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] text-slate-500">1 ý:</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={quickTfWeights[0]}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setQuickTfWeights([val, quickTfWeights[1], quickTfWeights[2], quickTfWeights[3]]);
+                            }}
+                            className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                          />
+                          <span className="text-slate-400 text-xs">%</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] text-slate-500">2 ý:</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={quickTfWeights[1]}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setQuickTfWeights([quickTfWeights[0], val, quickTfWeights[2], quickTfWeights[3]]);
+                            }}
+                            className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                          />
+                          <span className="text-slate-400 text-xs">%</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] text-slate-500">3 ý:</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={quickTfWeights[2]}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setQuickTfWeights([quickTfWeights[0], quickTfWeights[1], val, quickTfWeights[3]]);
+                            }}
+                            className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                          />
+                          <span className="text-slate-400 text-xs">%</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] text-slate-500">4 ý:</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={quickTfWeights[3]}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setQuickTfWeights([quickTfWeights[0], quickTfWeights[1], quickTfWeights[2], val]);
+                            }}
+                            className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                          />
+                          <span className="text-slate-400 text-xs">%</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* THỜI GIAN MỞ THI TRỰC TUYẾN & HỌC SINH TỰ DO */}
+                  <div className="p-3.5 bg-indigo-50/70 rounded-xl border border-indigo-200/80 space-y-3">
+                    <div className="flex items-center gap-1.5 font-bold text-indigo-950 text-xs">
+                      <Calendar className="w-4 h-4 text-indigo-600" />
+                      <span>Cài Đặt Thời Gian Mở Thi Online & Link Học Sinh Tự Do</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 text-[11px] mb-1">
+                          Bắt đầu mở thi (từ ngày/giờ)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={quickStartTime}
+                          onChange={(e) => setQuickStartTime(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 text-[11px] mb-1">
+                          Hạn chót nộp bài (đến ngày/giờ)
+                        </label>
+                        <input
+                          type="datetime-local"
+                          value={quickEndTime}
+                          onChange={(e) => setQuickEndTime(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-semibold text-slate-700 text-[11px] mb-1">
+                          Số lần làm bài tối đa
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={quickMaxAttempts}
+                          onChange={(e) => setQuickMaxAttempts(Number(e.target.value) || 1)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-center font-bold text-slate-800"
+                        />
+                      </div>
+                    </div>
+
+                    <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        checked={quickIsPublicLink}
+                        onChange={(e) => setQuickIsPublicLink(e.target.checked)}
+                        className="rounded text-indigo-600 focus:ring-indigo-500 mt-0.5"
+                      />
+                      <div>
+                        <div className="font-semibold text-indigo-950 text-xs">
+                          Tạo Link công khai cho Học Sinh Tự Do làm bài trực tiếp
+                        </div>
+                        <div className="text-[11px] text-slate-500 leading-snug">
+                          Học sinh không có tài khoản trường lớp chỉ cần bấm vào Link, nhập Họ & Tên + Tên Trường/Lớp là làm bài thi ngay không cần đăng nhập.
+                        </div>
+                      </div>
+                    </label>
+                  </div>
                 </div>
               )}
 
@@ -2669,6 +2969,91 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ================= MODAL TẠO ĐỀ THÀNH CÔNG & SAO CHÉP LINK ================= */}
+      {createdExamSuccess && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150 border border-slate-100">
+            <div className="text-center space-y-2">
+              <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <CheckCircle2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">Tạo Đề Thi Thành Công!</h3>
+              <p className="text-xs text-slate-500">
+                Đề thi <strong>{createdExamSuccess.title}</strong> (Mã đề:{' '}
+                <span className="font-mono font-bold text-indigo-600">{createdExamSuccess.code}</span>) đã sẵn sàng.
+              </p>
+            </div>
+
+            {/* Hộp link làm bài */}
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                <span className="flex items-center gap-1.5 text-indigo-700">
+                  <Link className="w-4 h-4" />
+                  Đường Link làm bài cho Học Sinh:
+                </span>
+                <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 font-semibold">
+                  Dành cho cả HS Tự Do
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}/exam/${createdExamSuccess.code}`}
+                  className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 select-all"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleCopyExamLink(createdExamSuccess)}
+                  className={`px-3.5 py-2 rounded-lg font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                    copiedExamId === createdExamSuccess.id
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-xs'
+                  }`}
+                >
+                  {copiedExamId === createdExamSuccess.id ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Đã chép</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>Sao chép link</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed italic">
+                💡 Thầy/Cô chỉ cần gửi link này qua Zalo/Facebook. Học sinh chỉ cần mở link trên điện thoại hoặc máy tính, nhập tên và bắt đầu làm bài ngay!
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setCreatedExamSuccess(null)}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const exam = createdExamSuccess;
+                  setCreatedExamSuccess(null);
+                  handleOpenPreview(exam);
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Xem Đề Thi</span>
+              </button>
             </div>
           </div>
         </div>

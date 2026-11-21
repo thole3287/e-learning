@@ -25,6 +25,7 @@ import { ClassManagementView } from './features/teacher/ClassManagementView';
 // Exam Room Views
 import { ExamRoomView } from './features/exam-taking/ExamRoomView';
 import { ExamResultView } from './features/exam-taking/ExamResultView';
+import { PublicExamJoinView } from './features/student/PublicExamJoinView';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({
@@ -136,6 +137,10 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             }
           />
+
+          {/* Public Exam Access for Students & Free Guests (Link làm bài trực tiếp) */}
+          <Route path="/exam/:code" element={<PublicExamJoinView />} />
+          <Route path="/join/:code" element={<PublicExamJoinView />} />
 
           {/* Exam Room (Distraction-Free Layout) */}
           <Route

@@ -36,6 +36,47 @@ class Exam extends Model
         'shuffle_options' => 'boolean',
     ];
 
+    protected $appends = ['settings'];
+
+    public function getSettingsAttribute(): array
+    {
+        if (empty($this->attributes['description'])) {
+            return [];
+        }
+        $decoded = json_decode($this->attributes['description'], true);
+        if (is_array($decoded) && isset($decoded['_settings'])) {
+            return (array) $decoded['_settings'];
+        }
+        return [];
+    }
+
+    public function setSettingsAttribute($val): void
+    {
+        $current = [];
+        if (!empty($this->attributes['description'])) {
+            $decoded = json_decode($this->attributes['description'], true);
+            if (is_array($decoded)) {
+                $current = $decoded;
+            } else {
+                $current['_text_description'] = $this->attributes['description'];
+            }
+        }
+        $current['_settings'] = (array) $val;
+        $this->attributes['description'] = json_encode($current, JSON_UNESCAPED_UNICODE);
+    }
+
+    public function getCleanDescriptionAttribute(): string
+    {
+        if (empty($this->attributes['description'])) {
+            return '';
+        }
+        $decoded = json_decode($this->attributes['description'], true);
+        if (is_array($decoded)) {
+            return $decoded['_text_description'] ?? '';
+        }
+        return (string) $this->attributes['description'];
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_id');

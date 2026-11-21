@@ -8,7 +8,10 @@ use App\Models\ExamAssignment;
 use App\Models\ExamQuestion;
 use App\Models\Question;
 use App\Models\QuestionOption;
+use App\Models\User;
+use App\Services\ExamAttemptService;
 use App\Services\ExamMatrixService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -338,6 +341,10 @@ class ExamController extends Controller
             'description' => 'nullable|string',
             'save_to_bank' => 'boolean',
             'chapter_id' => 'nullable|exists:chapters,id',
+            'tf_grading_method' => 'nullable|string',
+            'tf_grading_weights' => 'nullable|array',
+            'is_public_link' => 'nullable|boolean',
+            'max_attempts' => 'nullable|integer|min:1|max:10',
             'questions' => 'required|array|min:1',
             'questions.*.content' => 'required|string',
             'questions.*.question_type' => 'nullable|string',
@@ -364,14 +371,20 @@ class ExamController extends Controller
         $defaultPointsPerQ = $numQuestions > 0 ? round($totalPoints / $numQuestions, 2) : 1.0;
 
         $result = DB::transaction(function () use ($validated, $user, $code, $defaultPointsPerQ, $request) {
-            // 1. Tạo Exam
-            $exam = Exam::create([
+            // 1. Tạo Exam với cấu hình chấm điểm Đúng/Sai và liên kết tự do
+            $settings = [
+                'tf_grading_method' => $validated['tf_grading_method'] ?? 'moet',
+                'tf_grading_weights' => $validated['tf_grading_weights'] ?? [10, 25, 50, 100],
+                'is_public_link' => $validated['is_public_link'] ?? true,
+                'max_attempts' => $validated['max_attempts'] ?? 1,
+            ];
+
+            $exam = new Exam([
                 'creator_id' => $user->id,
                 'subject_id' => $validated['subject_id'],
                 'grade_id' => $validated['grade_id'] ?? null,
                 'title' => $validated['title'],
                 'code' => $code,
-                'description' => $validated['description'] ?? null,
                 'duration_minutes' => $validated['duration_minutes'],
                 'total_points' => $validated['total_points'] ?? 10.0,
                 'pass_points' => $validated['pass_points'] ?? 5.0,
@@ -379,6 +392,8 @@ class ExamController extends Controller
                 'shuffle_options' => $validated['shuffle_options'] ?? true,
                 'status' => 'published',
             ]);
+            $exam->settings = $settings;
+            $exam->save();
 
             // 2. Tạo từng Question & Options, rồi gắn vào ExamQuestion
             $saveToBank = $validated['save_to_bank'] ?? true;
@@ -420,11 +435,27 @@ class ExamController extends Controller
                 ]);
             }
 
-            // 3. Tự động giao đề cho các lớp nếu có
-            if (!empty($validated['assign_class_ids'])) {
-                $startTime = $validated['start_time'] ?? now();
-                $endTime = $validated['end_time'] ?? now()->addDays(7);
+            // 3. Tự động giao đề cho các lớp nếu có & tạo Public Assignment cho thí sinh tự do
+            $startTime = !empty($validated['start_time']) ? Carbon::parse($validated['start_time']) : now();
+            $endTime = !empty($validated['end_time']) ? Carbon::parse($validated['end_time']) : now()->addDays(7);
+            $maxAttempts = (int) ($validated['max_attempts'] ?? 1);
+            $isPublicLink = (bool) ($validated['is_public_link'] ?? true);
 
+            if ($isPublicLink) {
+                ExamAssignment::create([
+                    'exam_id' => $exam->id,
+                    'class_id' => null,
+                    'student_id' => null,
+                    'assigned_by' => $user->id,
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
+                    'max_attempts' => $maxAttempts,
+                    'view_score_type' => 'immediately',
+                    'show_solutions' => true,
+                ]);
+            }
+
+            if (!empty($validated['assign_class_ids'])) {
                 foreach ($validated['assign_class_ids'] as $classId) {
                     ExamAssignment::create([
                         'exam_id' => $exam->id,
@@ -433,7 +464,7 @@ class ExamController extends Controller
                         'assigned_by' => $user->id,
                         'start_time' => $startTime,
                         'end_time' => $endTime,
-                        'max_attempts' => 1,
+                        'max_attempts' => $maxAttempts,
                         'view_score_type' => 'immediately',
                         'show_solutions' => true,
                     ]);
@@ -448,6 +479,180 @@ class ExamController extends Controller
             'message' => 'Tạo đề thi từ file thành công và đã đồng bộ vào ngân hàng câu hỏi.',
             'data' => $result->load(['subject', 'grade', 'examQuestions.question.options', 'assignments.schoolClass']),
         ], 201);
+    }
+
+    /**
+     * Lấy thông tin công khai của đề thi qua mã đề (Dành cho học sinh làm qua link)
+     */
+    public function getPublicExamInfo(string $code): JsonResponse
+    {
+        $exam = Exam::with(['subject', 'grade', 'creator'])->where('code', $code)->first();
+        if (!$exam) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy đề thi với mã: ' . $code], 404);
+        }
+
+        // Tìm assignment công khai hoặc mới nhất
+        $assignment = ExamAssignment::where('exam_id', $exam->id)
+            ->whereNull('class_id')
+            ->whereNull('student_id')
+            ->latest('start_time')
+            ->first();
+
+        if (!$assignment) {
+            $assignment = ExamAssignment::where('exam_id', $exam->id)->latest('start_time')->first();
+        }
+
+        $now = now();
+        $startTime = $assignment?->start_time ?? now();
+        $endTime = $assignment?->end_time ?? now()->addDays(7);
+        $isOpen = $now->gte($startTime) && $now->lte($endTime);
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $exam->id,
+                'code' => $exam->code,
+                'title' => $exam->title,
+                'subject_name' => $exam->subject->name ?? 'Môn học',
+                'grade_name' => $exam->grade->name ?? '',
+                'creator_name' => $exam->creator->name ?? 'Giáo viên',
+                'duration_minutes' => $exam->duration_minutes,
+                'total_points' => (float) $exam->total_points,
+                'total_questions' => $exam->examQuestions()->count(),
+                'start_time' => $startTime->toISOString(),
+                'end_time' => $endTime->toISOString(),
+                'is_open' => $isOpen,
+                'status_label' => $now->lt($startTime) ? 'upcoming' : ($isOpen ? 'open' : 'closed'),
+                'assignment_id' => $assignment?->id,
+                'settings' => $exam->settings,
+            ],
+        ]);
+    }
+
+    /**
+     * Học sinh có tài khoản đăng nhập bấm vào link để vào thi
+     */
+    public function joinPublicExam(Request $request, string $code): JsonResponse
+    {
+        $user = $request->user();
+        $exam = Exam::where('code', $code)->first();
+        if (!$exam) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy đề thi này.'], 404);
+        }
+
+        // Tìm assignment thích hợp
+        $enrolledClassIds = $user->enrolledClasses()->pluck('classes.id')->toArray();
+        $assignment = ExamAssignment::where('exam_id', $exam->id)
+            ->where(function ($q) use ($user, $enrolledClassIds) {
+                $q->whereIn('class_id', $enrolledClassIds)
+                  ->orWhere('student_id', $user->id)
+                  ->orWhere(function ($sub) {
+                      $sub->whereNull('class_id')->whereNull('student_id');
+                  });
+            })
+            ->latest('start_time')
+            ->first();
+
+        if (!$assignment) {
+            // Tự động tạo assignment công khai mở cho học sinh
+            $assignment = ExamAssignment::create([
+                'exam_id' => $exam->id,
+                'class_id' => null,
+                'student_id' => null,
+                'assigned_by' => $exam->creator_id,
+                'start_time' => now(),
+                'end_time' => now()->addDays(7),
+                'max_attempts' => $exam->settings['max_attempts'] ?? 1,
+                'view_score_type' => 'immediately',
+                'show_solutions' => true,
+            ]);
+        }
+
+        $attemptService = app(ExamAttemptService::class);
+        $payload = $attemptService->startAttempt($user, $assignment);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Vào phòng thi thành công',
+            'data' => [
+                'assignment_id' => $assignment->id,
+                'attempt_id' => $payload['attempt']['id'],
+                'room_data' => $payload,
+            ],
+        ]);
+    }
+
+    /**
+     * Học sinh tự do (chưa có tài khoản / chưa vào lớp) nhập Họ tên để vào thi ngay
+     */
+    public function guestJoinPublicExam(Request $request, string $code): JsonResponse
+    {
+        $validated = $request->validate([
+            'full_name' => 'required|string|min:2|max:100',
+            'class_name' => 'nullable|string|max:50',
+            'phone' => 'nullable|string|max:20',
+        ]);
+
+        $exam = Exam::where('code', $code)->first();
+        if (!$exam) {
+            return response()->json(['success' => false, 'message' => 'Không tìm thấy đề thi này.'], 404);
+        }
+
+        $cleanName = trim($validated['full_name']);
+        $uniqueSuffix = substr(md5($cleanName . ($validated['phone'] ?? '') . time()), 0, 8);
+        $username = 'hs_' . Str::slug($cleanName, '') . '_' . $uniqueSuffix;
+        $email = $username . '@hochoa247.io.vn';
+
+        $guestUser = User::create([
+            'name' => $cleanName . (!empty($validated['class_name']) ? ' (' . $validated['class_name'] . ')' : ''),
+            'username' => $username,
+            'email' => $email,
+            'phone' => $validated['phone'] ?? null,
+            'password' => bcrypt(Str::random(16)),
+            'role' => 'student',
+            'status' => 'active',
+        ]);
+
+        $token = $guestUser->createToken('guest_exam_token')->plainTextToken;
+
+        $assignment = ExamAssignment::where('exam_id', $exam->id)
+            ->whereNull('class_id')
+            ->whereNull('student_id')
+            ->latest('start_time')
+            ->first();
+
+        if (!$assignment) {
+            $assignment = ExamAssignment::create([
+                'exam_id' => $exam->id,
+                'class_id' => null,
+                'student_id' => null,
+                'assigned_by' => $exam->creator_id,
+                'start_time' => now(),
+                'end_time' => now()->addDays(7),
+                'max_attempts' => $exam->settings['max_attempts'] ?? 1,
+                'view_score_type' => 'immediately',
+                'show_solutions' => true,
+            ]);
+        }
+
+        $attemptService = app(ExamAttemptService::class);
+        $payload = $attemptService->startAttempt($guestUser, $assignment);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Đăng ký vào thi thành công',
+            'data' => [
+                'token' => $token,
+                'user' => [
+                    'id' => $guestUser->id,
+                    'name' => $guestUser->name,
+                    'role' => 'student',
+                ],
+                'assignment_id' => $assignment->id,
+                'attempt_id' => $payload['attempt']['id'],
+                'room_data' => $payload,
+            ],
+        ]);
     }
 
     public function getShuffledOffline(Request $request, Exam $exam): JsonResponse

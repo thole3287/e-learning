@@ -40,6 +40,19 @@ export const QuestionBankView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [difficultyFilter, setDifficultyFilter] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('');
+  const [chapterFilter, setChapterFilter] = useState('');
+  const [filterChapters, setFilterChapters] = useState<any[]>([]);
+  const [modalChapters, setModalChapters] = useState<any[]>([]);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<number>(1);
+  const [selectedChapterId, setSelectedChapterId] = useState<string | number>('');
+  const [importChapterId, setImportChapterId] = useState<string | number>('');
+
+  // Modal tạo nhanh Chủ đề / Chương học
+  const [showNewChapterModal, setShowNewChapterModal] = useState(false);
+  const [newChapterName, setNewChapterName] = useState('');
+  const [newChapterSubjectId, setNewChapterSubjectId] = useState<number>(1);
+  const [isCreatingChapter, setIsCreatingChapter] = useState(false);
+
   const [questionTypeFilter, setQuestionTypeFilter] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -102,6 +115,7 @@ export const QuestionBankView: React.FC = () => {
       };
       if (difficultyFilter) params.difficulty_level = difficultyFilter;
       if (subjectFilter) params.subject_id = subjectFilter;
+      if (chapterFilter) params.chapter_id = chapterFilter;
       if (questionTypeFilter) params.question_type = questionTypeFilter;
       if (searchKeyword.trim()) params.search = searchKeyword.trim();
 
@@ -145,16 +159,89 @@ export const QuestionBankView: React.FC = () => {
 
   useEffect(() => {
     fetchQuestions(1, perPage);
-  }, [difficultyFilter, subjectFilter, questionTypeFilter, searchKeyword, perPage]);
+  }, [difficultyFilter, subjectFilter, chapterFilter, questionTypeFilter, searchKeyword, perPage]);
+
+  const fetchChaptersForSubject = async (subId: number | string) => {
+    if (!subId) return [];
+    try {
+      const res: any = await api.get(`/subjects/${subId}/chapters`);
+      if (res.success) {
+        return res.data || [];
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  };
 
   useEffect(() => {
     api.get('/subjects').then((res: any) => {
       if (res.success) {
         setSubjects(res.data);
-        if (res.data.length > 0) setImportSubjectId(res.data[0].id);
+        if (res.data.length > 0) {
+          const firstId = res.data[0].id;
+          setImportSubjectId(firstId);
+          setSelectedSubjectId(firstId);
+          setNewChapterSubjectId(firstId);
+          fetchChaptersForSubject(firstId).then(setModalChapters);
+        }
       }
     });
   }, []);
+
+  useEffect(() => {
+    if (subjectFilter) {
+      fetchChaptersForSubject(subjectFilter).then(setFilterChapters);
+    } else {
+      setFilterChapters([]);
+      setChapterFilter('');
+    }
+  }, [subjectFilter]);
+
+  useEffect(() => {
+    if (importSubjectId) {
+      fetchChaptersForSubject(importSubjectId).then(setModalChapters);
+    }
+  }, [importSubjectId]);
+
+  useEffect(() => {
+    if (selectedSubjectId) {
+      fetchChaptersForSubject(selectedSubjectId).then(setModalChapters);
+    }
+  }, [selectedSubjectId]);
+
+  const handleCreateNewChapter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChapterName.trim()) {
+      alert('Vui lòng nhập tên chủ đề / chương học');
+      return;
+    }
+    setIsCreatingChapter(true);
+    try {
+      const targetSubId = newChapterSubjectId || importSubjectId || (subjects[0]?.id || 1);
+      const res: any = await api.post('/chapters', {
+        subject_id: targetSubId,
+        name: newChapterName.trim(),
+      });
+      if (res.success && res.data) {
+        alert('Tạo chủ đề / chương học mới thành công!');
+        const createdChapter = res.data;
+        setNewChapterName('');
+        setShowNewChapterModal(false);
+
+        // Cập nhật lại danh sách chapters
+        const updated = await fetchChaptersForSubject(targetSubId);
+        setFilterChapters(updated);
+        setModalChapters(updated);
+        setImportChapterId(createdChapter.id);
+        setSelectedChapterId(createdChapter.id);
+      }
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Không thể tạo chủ đề');
+    } finally {
+      setIsCreatingChapter(false);
+    }
+  };
 
   // Bộ phân tích cú pháp đề thi toàn diện (Chuẩn cấu trúc Đề thi GDPT 2018 Bộ GD&ĐT)
   const parseWordText = (text: string, defaultDiff: number) => {
@@ -633,8 +720,10 @@ export const QuestionBankView: React.FC = () => {
     try {
       const payload = {
         subject_id: importSubjectId,
+        chapter_id: importChapterId ? Number(importChapterId) : null,
         questions: parsedQuestions.map((q) => ({
           subject_id: importSubjectId,
+          chapter_id: importChapterId ? Number(importChapterId) : null,
           question_type: q.question_type || 'single_choice',
           difficulty_level: q.difficulty_level || importDefaultDifficulty,
           content: q.content,
@@ -670,6 +759,10 @@ export const QuestionBankView: React.FC = () => {
     setFillBlankAnswer('');
     setQuestionType('single_choice');
     setDifficultyLevel(1);
+    const curSub = subjectFilter ? Number(subjectFilter) : (subjects[0]?.id || 1);
+    setSelectedSubjectId(curSub);
+    setSelectedChapterId(chapterFilter || '');
+    fetchChaptersForSubject(curSub).then(setModalChapters);
     setOptions([
       { content: '', is_correct: true },
       { content: '', is_correct: false },
@@ -687,6 +780,11 @@ export const QuestionBankView: React.FC = () => {
     setExplanation(q.explanation || '');
     setQuestionType(q.question_type);
     setDifficultyLevel(q.difficulty_level);
+    setSelectedSubjectId(q.subject_id || 1);
+    setSelectedChapterId(q.chapter_id || '');
+    if (q.subject_id) {
+      fetchChaptersForSubject(q.subject_id).then(setModalChapters);
+    }
 
     if (q.question_type === 'fill_in_blank') {
       const correctOpt = q.options?.find((o) => o.is_correct);
@@ -821,7 +919,8 @@ export const QuestionBankView: React.FC = () => {
       }
 
       const payload = {
-        subject_id: importSubjectId || 1,
+        subject_id: selectedSubjectId || importSubjectId || 1,
+        chapter_id: selectedChapterId ? Number(selectedChapterId) : null,
         question_type: questionType,
         difficulty_level: difficultyLevel,
         content,
@@ -956,6 +1055,39 @@ export const QuestionBankView: React.FC = () => {
             ))}
           </select>
 
+          {/* Chủ đề / Chương học */}
+          <div className="flex items-center gap-1">
+            <select
+              value={chapterFilter}
+              onChange={(e) => {
+                setChapterFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              disabled={!subjectFilter && filterChapters.length === 0}
+              className="border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 text-slate-700 focus:outline-none focus:border-indigo-500 font-medium disabled:opacity-50"
+            >
+              <option value="">
+                {!subjectFilter ? '📖 Tất cả chủ đề / chương' : '📖 Tất cả chủ đề'}
+              </option>
+              {filterChapters.map((ch) => (
+                <option key={ch.id} value={ch.id}>
+                  {ch.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                setNewChapterSubjectId(subjectFilter ? Number(subjectFilter) : (subjects[0]?.id || 1));
+                setShowNewChapterModal(true);
+              }}
+              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors cursor-pointer"
+              title="Thêm chủ đề / chương học mới cho môn học này"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
           {/* Dạng câu hỏi */}
           <select
             value={questionTypeFilter}
@@ -1020,7 +1152,7 @@ export const QuestionBankView: React.FC = () => {
           {questions.map((q, idx) => (
             <div key={q.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all space-y-4">
               <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="min-w-6 h-6 px-1.5 rounded-full bg-slate-100 text-slate-700 font-bold text-xs flex items-center justify-center">
                     {(currentPage - 1) * (perPage === -1 ? totalQuestions : perPage) + idx + 1}
                   </span>
@@ -1032,6 +1164,17 @@ export const QuestionBankView: React.FC = () => {
                       ? 'Đúng / Sai'
                       : 'Trắc nghiệm đơn'}
                   </span>
+                  {q.subject && (
+                    <span className="text-[11px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                      {q.subject.name}
+                    </span>
+                  )}
+                  {q.chapter && (
+                    <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                      <BookOpen className="w-3 h-3 text-amber-600" />
+                      <span>{q.chapter.name}</span>
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5">
                   <button
@@ -1282,6 +1425,56 @@ export const QuestionBankView: React.FC = () => {
                     <option value={2}>Mức 2: Thông hiểu</option>
                     <option value={3}>Mức 3: Vận dụng</option>
                     <option value={4}>Mức 4: Vận dụng cao</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Môn học & Chủ đề / Chương học */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Môn học</label>
+                  <select
+                    value={selectedSubjectId}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setSelectedSubjectId(val);
+                      setSelectedChapterId('');
+                      fetchChaptersForSubject(val).then(setModalChapters);
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 font-medium"
+                  >
+                    {subjects.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({s.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700">Chủ đề / Chương học</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewChapterSubjectId(selectedSubjectId);
+                        setShowNewChapterModal(true);
+                      }}
+                      className="text-[10px] text-indigo-600 hover:underline font-semibold"
+                    >
+                      + Thêm chủ đề mới
+                    </button>
+                  </div>
+                  <select
+                    value={selectedChapterId}
+                    onChange={(e) => setSelectedChapterId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 font-medium"
+                  >
+                    <option value="">-- Chưa phân chủ đề (Tùy chọn) --</option>
+                    {modalChapters.map((ch) => (
+                      <option key={ch.id} value={ch.id}>
+                        {ch.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1541,18 +1734,51 @@ export const QuestionBankView: React.FC = () => {
               </button>
             </div>
 
-            {/* Chọn Môn học & Mức độ nhận thức */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+            {/* Chọn Môn học, Chủ đề & Mức độ nhận thức */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Môn học mục tiêu:</label>
                 <select
                   value={importSubjectId}
-                  onChange={(e) => setImportSubjectId(Number(e.target.value))}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setImportSubjectId(val);
+                    setImportChapterId('');
+                    fetchChaptersForSubject(val).then(setModalChapters);
+                  }}
                   className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 font-medium"
                 >
                   {subjects.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name} ({s.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">Chủ đề / Chương học:</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewChapterSubjectId(importSubjectId);
+                      setShowNewChapterModal(true);
+                    }}
+                    className="text-[10px] text-indigo-600 hover:underline font-semibold cursor-pointer"
+                  >
+                    + Thêm mới
+                  </button>
+                </div>
+                <select
+                  value={importChapterId}
+                  onChange={(e) => setImportChapterId(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 font-medium"
+                >
+                  <option value="">-- Chưa phân chủ đề (Tùy chọn) --</option>
+                  {modalChapters.map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      {ch.name}
                     </option>
                   ))}
                 </select>
@@ -1881,6 +2107,75 @@ export const QuestionBankView: React.FC = () => {
                 {isImporting ? 'Đang lưu vào ngân hàng...' : `Lưu tất cả ${parsedQuestions.length} câu hỏi vào Ngân Hàng`}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ================= MODAL TẠO CHỦ ĐỀ / CHƯƠNG HỌC MỚI ================= */}
+      {showNewChapterModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 border border-slate-100">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-bold text-slate-900 text-sm">Thêm Chủ Đề / Chương Học Mới</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewChapterModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNewChapter} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Môn học</label>
+                <select
+                  value={newChapterSubjectId}
+                  onChange={(e) => setNewChapterSubjectId(Number(e.target.value))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium"
+                >
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Tên Chủ đề / Chương học <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="VD: Este - Lipit, Bảng tuần hoàn, Dao động cơ..."
+                  value={newChapterName}
+                  onChange={(e) => setNewChapterName(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowNewChapterModal(false)}
+                  className="px-3.5 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-semibold cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingChapter}
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{isCreatingChapter ? 'Đang tạo...' : 'Tạo Chủ Đề'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

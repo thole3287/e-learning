@@ -30,7 +30,10 @@ class ExamAttemptService
     {
         // 1. Kiểm tra quyền của học sinh với bài thi
         $hasAccess = false;
-        if ($assignment->student_id === $student->id) {
+        if ($assignment->class_id === null && $assignment->student_id === null) {
+            // Đề thi mở công khai cho mọi thí sinh / học sinh tự do
+            $hasAccess = true;
+        } elseif ($assignment->student_id === $student->id) {
             $hasAccess = true;
         } elseif ($assignment->class_id) {
             $isEnrolled = $student->enrolledClasses()

@@ -22,6 +22,8 @@ export interface QuestionOption {
 
 export interface Question {
   id: number;
+  subject_id?: number;
+  subject?: { id: number; name: string; code?: string };
   question_type: QuestionType;
   difficulty_level: 1 | 2 | 3 | 4;
   content: string;
@@ -29,6 +31,8 @@ export interface Question {
   default_points?: number;
   points?: number;
   options: QuestionOption[];
+  chapter?: { id: number; name: string };
+  chapter_id?: number;
 }
 
 export interface Exam {
@@ -42,6 +46,12 @@ export interface Exam {
   status: 'draft' | 'published' | 'closed' | 'archived';
   subject?: { id: number; name: string };
   exam_questions_count?: number;
+  settings?: {
+    tf_grading_method?: string;
+    tf_grading_weights?: number[];
+    is_public_link?: boolean;
+    max_attempts?: number;
+  };
 }
 
 export interface StudentExamItem {
