@@ -46,7 +46,7 @@ export const LoginView: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4 py-12">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 px-4 py-12">
       <div className="max-w-md w-full bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl p-8 space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">

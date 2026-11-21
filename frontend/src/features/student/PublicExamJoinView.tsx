@@ -167,7 +167,7 @@ export const PublicExamJoinView: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-emerald-50/30 to-indigo-50/30 flex items-center justify-center p-4 sm:p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-emerald-50/30 to-indigo-50/30 flex flex-col items-center justify-center p-4 sm:p-6 py-10">
       <div className="max-w-xl w-full bg-white rounded-3xl border border-slate-200/80 shadow-2xl overflow-hidden">
         {/* Banner Header */}
         <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-6 sm:p-8 text-white relative">
