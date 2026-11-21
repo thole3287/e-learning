@@ -30,7 +30,12 @@ class ExamController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Exam::with(['subject', 'grade', 'creator', 'assignments'])->withCount(['examQuestions', 'assignments', 'attempts']);
+        $query = Exam::with([
+            'subject:id,name,code',
+            'grade:id,name',
+            'creator:id,full_name,email',
+            'assignments:id,exam_id,start_time,end_time,max_attempts'
+        ])->withCount(['examQuestions', 'assignments', 'attempts']);
 
         if ($user->isTeacher()) {
             $query->where('creator_id', $user->id);

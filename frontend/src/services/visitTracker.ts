@@ -8,11 +8,22 @@ export interface VisitStats {
   online_visitors: number;
 }
 
-let cachedStats: VisitStats | null = null;
+let cachedStats: VisitStats | null = (() => {
+  try {
+    const raw = sessionStorage.getItem('visitor_cached_stats');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+})();
 let listeners: Array<(stats: VisitStats) => void> = [];
+let inFlightRecordPromise: Promise<VisitStats | null> | null = null;
 
 function notify(stats: VisitStats) {
   cachedStats = stats;
+  try {
+    sessionStorage.setItem('visitor_cached_stats', JSON.stringify(stats));
+  } catch {}
   listeners.forEach((fn) => fn(stats));
 }
 
@@ -34,30 +45,40 @@ function getSessionId(): string {
 }
 
 export async function recordVisit(page?: string): Promise<VisitStats | null> {
-  try {
-    const sessionId = getSessionId();
-    const lastRecordTs = Number(sessionStorage.getItem('last_record_ts') || 0);
-    const now = Date.now();
-
-    // Nếu vừa gửi trong vòng 2 phút thì chỉ lấy stats để tránh ghi nhận liên tục khi chuyển trang
-    if (now - lastRecordTs < 2 * 60 * 1000 && cachedStats) {
-      return cachedStats;
-    }
-
-    sessionStorage.setItem('last_record_ts', String(now));
-    const res: any = await api.post('/visits/record', {
-      session_id: sessionId,
-      page: page || window.location.pathname,
-    });
-
-    if (res.success && res.data) {
-      notify(res.data);
-      return res.data;
-    }
-  } catch (e) {
-    console.debug('Visit tracking skipped:', e);
+  if (inFlightRecordPromise) {
+    return inFlightRecordPromise;
   }
-  return cachedStats;
+
+  const now = Date.now();
+  const lastRecordTs = Number(sessionStorage.getItem('last_record_ts') || 0);
+
+  // Nếu vừa gửi trong vòng 2 phút và đã có cache thì dùng luôn, không gọi network
+  if (now - lastRecordTs < 2 * 60 * 1000 && cachedStats) {
+    return cachedStats;
+  }
+
+  inFlightRecordPromise = (async () => {
+    try {
+      const sessionId = getSessionId();
+      sessionStorage.setItem('last_record_ts', String(now));
+      const res: any = await api.post('/visits/record', {
+        session_id: sessionId,
+        page: page || window.location.pathname,
+      });
+
+      if (res.success && res.data) {
+        notify(res.data);
+        return res.data;
+      }
+    } catch (e) {
+      console.debug('Visit tracking skipped:', e);
+    } finally {
+      inFlightRecordPromise = null;
+    }
+    return cachedStats;
+  })();
+
+  return inFlightRecordPromise;
 }
 
 export async function fetchVisitStats(): Promise<VisitStats | null> {

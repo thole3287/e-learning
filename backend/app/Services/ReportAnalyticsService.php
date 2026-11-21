@@ -12,94 +12,97 @@ use Illuminate\Support\Facades\DB;
 class ReportAnalyticsService
 {
     /**
-     * Thống kê tổng quan cho Dashboard theo Role
+     * Thống kê tổng quan cho Dashboard theo Role (cache 20s tăng tốc tải trang)
      */
     public function getDashboardStats(User $user): array
     {
-        $visitStats = (new VisitTrackerService())->getStats();
+        $cacheKey = "dashboard_stats_{$user->id}_{$user->role}";
+        return cache()->remember($cacheKey, 20, function () use ($user) {
+            $visitStats = (new VisitTrackerService())->getStats();
 
-        if ($user->isSuperAdmin()) {
+            if ($user->isSuperAdmin()) {
+                return [
+                    'total_schools' => DB::table('schools')->count(),
+                    'total_teachers' => User::where('role', 'teacher')->count(),
+                    'total_students' => User::where('role', 'student')->count(),
+                    'total_classes' => DB::table('classes')->whereNull('deleted_at')->count(),
+                    'total_questions' => DB::table('questions')->whereNull('deleted_at')->count(),
+                    'total_exams' => DB::table('exams')->whereNull('deleted_at')->count(),
+                    'total_attempts' => DB::table('exam_attempts')->count(),
+                    'visit_stats' => $visitStats,
+                    'recent_attempts' => ExamAttempt::with(['student:id,full_name', 'exam:id,title'])
+                        ->latest()
+                        ->limit(5)
+                        ->get()
+                        ->map(fn($a) => [
+                            'id' => $a->id,
+                            'student_name' => $a->student?->full_name ?? 'Học sinh',
+                            'exam_title' => $a->exam?->title ?? 'Bài thi',
+                            'score' => (float) $a->score,
+                            'status' => $a->status,
+                            'submitted_at' => $a->submitted_at?->format('H:i d/m/Y'),
+                        ]),
+                ];
+            }
+
+            if ($user->isTeacher()) {
+                $assignedClassIds = DB::table('teacher_classes')
+                    ->where('teacher_id', $user->id)
+                    ->pluck('class_id')
+                    ->unique()
+                    ->toArray();
+
+                $totalStudents = DB::table('class_students')
+                    ->whereIn('class_id', $assignedClassIds)
+                    ->where('status', 'active')
+                    ->distinct('student_id')
+                    ->count('student_id');
+
+                $createdExamIds = Exam::where('creator_id', $user->id)->pluck('id')->toArray();
+
+                return [
+                    'assigned_classes_count' => count($assignedClassIds),
+                    'total_students' => $totalStudents,
+                    'created_questions_count' => DB::table('questions')->where('creator_id', $user->id)->whereNull('deleted_at')->count(),
+                    'created_exams_count' => count($createdExamIds),
+                    'total_exam_attempts' => DB::table('exam_attempts')->whereIn('exam_id', $createdExamIds)->count(),
+                    'active_assignments' => DB::table('exam_assignments')
+                        ->whereIn('exam_id', $createdExamIds)
+                        ->where('start_time', '<=', now())
+                        ->where('end_time', '>=', now())
+                        ->count(),
+                    'visit_stats' => $visitStats,
+                ];
+            }
+
+            // Student Dashboard Stats
+            $enrolledClassIds = $user->enrolledClasses()->pluck('classes.id')->toArray();
+            $assignedExamsCount = DB::table('exam_assignments')
+                ->where(function ($q) use ($user, $enrolledClassIds) {
+                    $q->whereIn('class_id', $enrolledClassIds)
+                        ->orWhere('student_id', $user->id);
+                })
+                ->count();
+
+            $completedAttempts = ExamAttempt::where('student_id', $user->id)
+                ->whereIn('status', ['submitted', 'auto_submitted', 'graded'])
+                ->get();
+
+            $avgScore = $completedAttempts->count() > 0 ? $completedAttempts->avg('score') : 0.0;
+
             return [
-                'total_schools' => DB::table('schools')->count(),
-                'total_teachers' => User::where('role', 'teacher')->count(),
-                'total_students' => User::where('role', 'student')->count(),
-                'total_classes' => DB::table('classes')->whereNull('deleted_at')->count(),
-                'total_questions' => DB::table('questions')->whereNull('deleted_at')->count(),
-                'total_exams' => DB::table('exams')->whereNull('deleted_at')->count(),
-                'total_attempts' => DB::table('exam_attempts')->count(),
-                'visit_stats' => $visitStats,
-                'recent_attempts' => ExamAttempt::with(['student', 'exam'])
-                    ->latest()
-                    ->limit(5)
-                    ->get()
-                    ->map(fn($a) => [
-                        'id' => $a->id,
-                        'student_name' => $a->student->full_name,
-                        'exam_title' => $a->exam->title,
-                        'score' => (float) $a->score,
-                        'status' => $a->status,
-                        'submitted_at' => $a->submitted_at?->format('H:i d/m/Y'),
-                    ]),
+                'assigned_exams_count' => $assignedExamsCount,
+                'completed_attempts_count' => $completedAttempts->count(),
+                'average_score' => round($avgScore, 2),
+                'recent_results' => $completedAttempts->sortByDesc('id')->take(5)->values()->map(fn($a) => [
+                    'id' => $a->id,
+                    'exam_title' => $a->exam?->title ?? 'Bài thi',
+                    'score' => (float) $a->score,
+                    'status' => $a->status,
+                    'submitted_at' => $a->submitted_at?->format('H:i d/m/Y'),
+                ]),
             ];
-        }
-
-        if ($user->isTeacher()) {
-            $assignedClassIds = DB::table('teacher_classes')
-                ->where('teacher_id', $user->id)
-                ->pluck('class_id')
-                ->unique()
-                ->toArray();
-
-            $totalStudents = DB::table('class_students')
-                ->whereIn('class_id', $assignedClassIds)
-                ->where('status', 'active')
-                ->distinct('student_id')
-                ->count('student_id');
-
-            $createdExamIds = Exam::where('creator_id', $user->id)->pluck('id')->toArray();
-
-            return [
-                'assigned_classes_count' => count($assignedClassIds),
-                'total_students' => $totalStudents,
-                'created_questions_count' => DB::table('questions')->where('creator_id', $user->id)->whereNull('deleted_at')->count(),
-                'created_exams_count' => count($createdExamIds),
-                'total_exam_attempts' => DB::table('exam_attempts')->whereIn('exam_id', $createdExamIds)->count(),
-                'active_assignments' => DB::table('exam_assignments')
-                    ->whereIn('exam_id', $createdExamIds)
-                    ->where('start_time', '<=', now())
-                    ->where('end_time', '>=', now())
-                    ->count(),
-                'visit_stats' => $visitStats,
-            ];
-        }
-
-        // Student Dashboard Stats
-        $enrolledClassIds = $user->enrolledClasses()->pluck('classes.id')->toArray();
-        $assignedExamsCount = DB::table('exam_assignments')
-            ->where(function ($q) use ($user, $enrolledClassIds) {
-                $q->whereIn('class_id', $enrolledClassIds)
-                    ->orWhere('student_id', $user->id);
-            })
-            ->count();
-
-        $completedAttempts = ExamAttempt::where('student_id', $user->id)
-            ->whereIn('status', ['submitted', 'auto_submitted', 'graded'])
-            ->get();
-
-        $avgScore = $completedAttempts->count() > 0 ? $completedAttempts->avg('score') : 0.0;
-
-        return [
-            'assigned_exams_count' => $assignedExamsCount,
-            'completed_attempts_count' => $completedAttempts->count(),
-            'average_score' => round($avgScore, 2),
-            'recent_results' => $completedAttempts->sortByDesc('id')->take(5)->values()->map(fn($a) => [
-                'attempt_id' => $a->id,
-                'exam_title' => $a->exam->title,
-                'score' => (float) $a->score,
-                'total_points' => (float) $a->exam->total_points,
-                'submitted_at' => $a->submitted_at?->format('H:i d/m/Y'),
-            ]),
-        ];
+        });
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\SystemSetting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class VisitTrackerService
 {
@@ -16,13 +17,20 @@ class VisitTrackerService
         $yesterday = now()->subDay()->format('Y-m-d');
         $thisMonth = now()->format('Y-m');
 
+        // Lấy tất cả cài đặt chỉ với 1 câu query duy nhất thay vì 3-5 câu
+        $settingsMap = SystemSetting::whereIn('key', [
+            'stats_active_sessions',
+            'stats_visits_daily',
+            'stats_total_visits'
+        ])->pluck('value', 'key');
+
         // 1. Quản lý sessions online (trong vòng 10 phút gần nhất)
         $ip = $request->ip() ?? '127.0.0.1';
         $ua = $request->header('User-Agent') ?? 'unknown';
         $clientSessionId = $request->input('session_id');
         $sessionKey = $clientSessionId ?: md5($ip . '|' . substr($ua, 0, 50));
 
-        $activeSessionsJson = SystemSetting::get('stats_active_sessions', '[]');
+        $activeSessionsJson = $settingsMap['stats_active_sessions'] ?? '[]';
         $activeSessions = json_decode($activeSessionsJson, true) ?: [];
 
         $nowTs = now()->timestamp;
@@ -39,10 +47,10 @@ class VisitTrackerService
         SystemSetting::set('stats_active_sessions', json_encode($activeSessions), 'Active user sessions in last 10 mins');
 
         // 2. Cập nhật lượt truy cập ngày và tổng
-        $dailyJson = SystemSetting::get('stats_visits_daily', '{}');
+        $dailyJson = $settingsMap['stats_visits_daily'] ?? '{}';
         $daily = json_decode($dailyJson, true) ?: [];
 
-        $totalVisits = (int) SystemSetting::get('stats_total_visits', 0);
+        $totalVisits = (int) ($settingsMap['stats_total_visits'] ?? 0);
 
         if ($isNewVisit) {
             $totalVisits += 1;
@@ -56,6 +64,7 @@ class VisitTrackerService
 
             SystemSetting::set('stats_total_visits', (string) $totalVisits, 'Total website visits');
             SystemSetting::set('stats_visits_daily', json_encode($daily), 'Daily website visits count');
+            Cache::forget('visit_tracker_stats');
         }
 
         // 3. Tính toán số liệu thống kê
@@ -81,38 +90,46 @@ class VisitTrackerService
     }
 
     /**
-     * Lấy thống kê hiện tại (không tăng lượt xem)
+     * Lấy thống kê hiện tại (không tăng lượt xem - cache 30s giảm tải DB)
      */
     public function getStats(): array
     {
-        $today = now()->format('Y-m-d');
-        $yesterday = now()->subDay()->format('Y-m-d');
-        $thisMonth = now()->format('Y-m');
+        return Cache::remember('visit_tracker_stats', 30, function () {
+            $today = now()->format('Y-m-d');
+            $yesterday = now()->subDay()->format('Y-m-d');
+            $thisMonth = now()->format('Y-m');
 
-        $totalVisits = (int) SystemSetting::get('stats_total_visits', 0);
-        $daily = json_decode(SystemSetting::get('stats_visits_daily', '{}'), true) ?: [];
+            $settingsMap = SystemSetting::whereIn('key', [
+                'stats_active_sessions',
+                'stats_visits_daily',
+                'stats_total_visits'
+            ])->pluck('value', 'key');
 
-        $activeSessions = json_decode(SystemSetting::get('stats_active_sessions', '[]'), true) ?: [];
-        $tenMinutesAgo = now()->timestamp - 600;
-        $activeSessions = array_filter($activeSessions, fn($ts) => $ts >= $tenMinutesAgo);
+            $totalVisits = (int) ($settingsMap['stats_total_visits'] ?? 0);
+            $daily = json_decode($settingsMap['stats_visits_daily'] ?? '{}', true) ?: [];
 
-        $todayVisits = $daily[$today] ?? 0;
-        $yesterdayVisits = $daily[$yesterday] ?? 0;
+            $activeSessions = json_decode($settingsMap['stats_active_sessions'] ?? '[]', true) ?: [];
+            $tenMinutesAgo = now()->timestamp - 600;
+            $activeSessions = array_filter($activeSessions, fn($ts) => $ts >= $tenMinutesAgo);
 
-        $monthVisits = 0;
-        foreach ($daily as $date => $count) {
-            if (str_starts_with($date, $thisMonth)) {
-                $monthVisits += (int) $count;
+            $todayVisits = $daily[$today] ?? 0;
+            $yesterdayVisits = $daily[$yesterday] ?? 0;
+
+            $monthVisits = 0;
+            foreach ($daily as $date => $count) {
+                if (str_starts_with($date, $thisMonth)) {
+                    $monthVisits += (int) $count;
+                }
             }
-        }
 
-        return [
-            'total_visits' => $totalVisits,
-            'today_visits' => $todayVisits,
-            'yesterday_visits' => $yesterdayVisits,
-            'this_month_visits' => max($todayVisits, $monthVisits),
-            'online_visitors' => max(1, count($activeSessions)),
-        ];
+            return [
+                'total_visits' => $totalVisits,
+                'today_visits' => $todayVisits,
+                'yesterday_visits' => $yesterdayVisits,
+                'this_month_visits' => max($todayVisits, $monthVisits),
+                'online_visitors' => max(1, count($activeSessions)),
+            ];
+        });
     }
 
     /**

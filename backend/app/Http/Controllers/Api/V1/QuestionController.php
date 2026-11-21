@@ -15,7 +15,13 @@ class QuestionController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Question::with(['subject', 'chapter', 'lesson', 'options', 'creator']);
+        $query = Question::with([
+            'subject:id,name,code',
+            'chapter:id,name,order_index',
+            'lesson:id,title',
+            'options:id,question_id,content,is_correct,order_index',
+            'creator:id,full_name'
+        ]);
 
         // Phân quyền câu hỏi: Giáo viên xem câu hỏi của mình hoặc câu hỏi chia sẻ chung
         if ($user->isTeacher()) {

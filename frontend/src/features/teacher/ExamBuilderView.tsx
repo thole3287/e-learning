@@ -280,12 +280,32 @@ export const ExamBuilderView: React.FC = () => {
     }
   };
 
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+
+  const fetchQuestionsForSubject = async (subId: number) => {
+    setLoadingQuestions(true);
+    try {
+      const res: any = await api.get(`/questions?subject_id=${subId}&per_page=300`);
+      if (res.success && res.data) {
+        setAvailableQuestions((prev) => {
+          const otherQs = prev.filter((q: any) => q.subject_id !== subId);
+          return [...otherQs, ...res.data];
+        });
+        return res.data;
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingQuestions(false);
+    }
+    return [];
+  };
+
   const loadResources = async () => {
     try {
-      const [classRes, subjectRes, questionRes]: any = await Promise.all([
+      const [classRes, subjectRes]: any = await Promise.all([
         api.get('/classes'),
         api.get('/subjects'),
-        api.get('/questions?per_page=500'),
       ]);
       if (classRes.success) setClasses(classRes.data);
       if (subjectRes.success) {
@@ -294,7 +314,6 @@ export const ExamBuilderView: React.FC = () => {
           setCreateForm((prev) => ({ ...prev, subject_id: subjectRes.data[0].id }));
         }
       }
-      if (questionRes.success) setAvailableQuestions(questionRes.data);
     } catch (err) {
       console.error(err);
     }
@@ -394,9 +413,12 @@ export const ExamBuilderView: React.FC = () => {
   };
 
   // Đổi môn học
-  const handleSubjectChange = (newSubjectId: number) => {
+  const handleSubjectChange = async (newSubjectId: number) => {
     setCreateForm((prev) => ({ ...prev, subject_id: newSubjectId }));
-    const subQs = availableQuestions.filter((q: any) => q.subject_id === newSubjectId);
+    let subQs = availableQuestions.filter((q: any) => q.subject_id === newSubjectId);
+    if (subQs.length === 0) {
+      subQs = await fetchQuestionsForSubject(newSubjectId);
+    }
     const l1 = subQs.filter((q) => q.difficulty_level === 1);
     const l2 = subQs.filter((q) => q.difficulty_level === 2);
     const l3 = subQs.filter((q) => q.difficulty_level === 3);
@@ -425,11 +447,27 @@ export const ExamBuilderView: React.FC = () => {
     ]);
   };
 
-  // Mở modal tạo đề thi mới
-  const handleOpenCreateModal = () => {
+  // Mở modal tạo đề thi mới (Lazy fetch câu hỏi môn này nếu chưa có)
+  const handleOpenCreateModal = async () => {
     const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const subId = subjects[0]?.id || 1;
-    const subQs = availableQuestions.filter((q: any) => q.subject_id === subId);
+    const subId = createForm.subject_id || subjects[0]?.id || 1;
+
+    setFilterLevel('all');
+    setSearchKeyword('');
+    setQuickStartTime(getInitialDateTime(0));
+    setQuickEndTime(getInitialDateTime(7));
+    setQuickMaxAttempts(1);
+    setQuickIsPublicLink(true);
+    setQuickAssignClassIds([]);
+    setQuickTfMethod('moet');
+    setQuickTfWeights([10, 25, 50, 100]);
+    setShowCreateModal(true);
+
+    let subQs = availableQuestions.filter((q: any) => q.subject_id === subId);
+    if (subQs.length === 0) {
+      subQs = await fetchQuestionsForSubject(subId);
+    }
+
     const l1 = subQs.filter((q) => q.difficulty_level === 1);
     const l2 = subQs.filter((q) => q.difficulty_level === 2);
     const l3 = subQs.filter((q) => q.difficulty_level === 3);

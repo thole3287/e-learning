@@ -26,26 +26,30 @@ class ExamTakingController extends Controller
         $student = $request->user();
         $enrolledClassIds = $student->enrolledClasses()->pluck('classes.id')->toArray();
 
-        $assignments = ExamAssignment::with(['exam.subject'])
+        $assignments = ExamAssignment::with(['exam.subject:id,name,code'])
             ->where(function ($q) use ($student, $enrolledClassIds) {
                 $q->whereIn('class_id', $enrolledClassIds)
                     ->orWhere('student_id', $student->id);
             })
             ->latest('start_time')
+            ->get();
+
+        $assignmentIds = $assignments->pluck('id')->toArray();
+        $attemptsByAssignment = ExamAttempt::where('student_id', $student->id)
+            ->whereIn('exam_assignment_id', $assignmentIds)
             ->get()
-            ->map(function ($assignment) use ($student) {
-                $now = now();
-                $isUpcoming = $now->lt($assignment->start_time);
-                $isExpired = $now->gt($assignment->end_time);
-                $isOpen = !$isUpcoming && !$isExpired;
+            ->groupBy('exam_assignment_id');
 
-                $attempts = ExamAttempt::where('exam_assignment_id', $assignment->id)
-                    ->where('student_id', $student->id)
-                    ->get();
+        $data = $assignments->map(function ($assignment) use ($student, $attemptsByAssignment) {
+            $now = now();
+            $isUpcoming = $now->lt($assignment->start_time);
+            $isExpired = $now->gt($assignment->end_time);
+            $isOpen = !$isUpcoming && !$isExpired;
 
-                $completedAttempts = $attempts->whereIn('status', ['submitted', 'auto_submitted', 'graded']);
-                $inProgressAttempt = $attempts->firstWhere('status', 'in_progress');
-                $latestCompleted = $completedAttempts->sortByDesc('id')->first();
+            $attempts = $attemptsByAssignment->get($assignment->id, collect());
+            $completedAttempts = $attempts->whereIn('status', ['submitted', 'auto_submitted', 'graded']);
+            $inProgressAttempt = $attempts->firstWhere('status', 'in_progress');
+            $latestCompleted = $completedAttempts->sortByDesc('id')->first();
 
                 // Kiểm tra học sinh có được xem lời giải theo cấu hình giáo viên hay không
                 $canViewSolutions = false;
@@ -90,7 +94,7 @@ class ExamTakingController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => $assignments,
+            'data' => $data,
         ]);
     }
 
