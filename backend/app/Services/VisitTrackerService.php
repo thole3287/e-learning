@@ -42,7 +42,7 @@ class VisitTrackerService
         $dailyJson = SystemSetting::get('stats_visits_daily', '{}');
         $daily = json_decode($dailyJson, true) ?: [];
 
-        $totalVisits = (int) SystemSetting::get('stats_total_visits', 1580); // Khởi tạo con số nền đẹp cho hệ thống
+        $totalVisits = (int) SystemSetting::get('stats_total_visits', 0);
 
         if ($isNewVisit) {
             $totalVisits += 1;
@@ -89,7 +89,7 @@ class VisitTrackerService
         $yesterday = now()->subDay()->format('Y-m-d');
         $thisMonth = now()->format('Y-m');
 
-        $totalVisits = (int) SystemSetting::get('stats_total_visits', 1580);
+        $totalVisits = (int) SystemSetting::get('stats_total_visits', 0);
         $daily = json_decode(SystemSetting::get('stats_visits_daily', '{}'), true) ?: [];
 
         $activeSessions = json_decode(SystemSetting::get('stats_active_sessions', '[]'), true) ?: [];
