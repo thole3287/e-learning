@@ -146,7 +146,7 @@ export const App: React.FC = () => {
           <Route
             path="/exam/room/:assignmentId"
             element={
-              <ProtectedRoute allowedRoles={['student', 'super_admin']}>
+              <ProtectedRoute allowedRoles={['student', 'teacher', 'super_admin']}>
                 <ExamRoomView />
               </ProtectedRoute>
             }

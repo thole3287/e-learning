@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { Clock, BookOpen, Award, Calendar, CheckCircle2, AlertCircle, ArrowRight, UserCheck, School, Eye } from 'lucide-react';
 
 interface PublicExamDetails {
@@ -25,6 +26,7 @@ interface PublicExamDetails {
 export const PublicExamJoinView: React.FC = () => {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
+  const { login, logout } = useAuth();
 
   const [exam, setExam] = useState<PublicExamDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,6 +37,7 @@ export const PublicExamJoinView: React.FC = () => {
   const [guestClass, setGuestClass] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [forceGuestMode, setForceGuestMode] = useState(false);
 
   // Kiểm tra xem đã có tài khoản đăng nhập hay chưa
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -113,7 +116,11 @@ export const PublicExamJoinView: React.FC = () => {
       });
 
       if (res.success && res.data?.token && res.data?.assignment_id) {
-        localStorage.setItem('auth_token', res.data.token);
+        if (res.data?.user) {
+          login(res.data.user, res.data.token);
+        } else {
+          localStorage.setItem('auth_token', res.data.token);
+        }
         navigate(`/exam/room/${res.data.assignment_id}`);
       } else {
         alert(res.message || 'Không thể tạo phiên thi tự do.');
@@ -268,7 +275,7 @@ export const PublicExamJoinView: React.FC = () => {
                 )}
               </div>
             </div>
-          ) : currentUser ? (
+          ) : currentUser && !forceGuestMode ? (
             <div className="space-y-4 pt-2">
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -282,9 +289,18 @@ export const PublicExamJoinView: React.FC = () => {
                     <div className="text-[11px] text-slate-500">{currentUser.email || currentUser.username}</div>
                   </div>
                 </div>
-                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
-                  Đã đăng nhập
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                    Đã đăng nhập
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => logout()}
+                    className="text-[11px] text-rose-600 hover:text-rose-700 font-medium px-2 py-1 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                  >
+                    Đăng xuất
+                  </button>
+                </div>
               </div>
 
               <button
@@ -295,12 +311,33 @@ export const PublicExamJoinView: React.FC = () => {
                 <span>{isSubmitting ? 'Đang chuẩn bị đề...' : '🚀 Bắt Đầu Làm Bài Ngay'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={() => setForceGuestMode(true)}
+                  className="text-xs text-slate-500 hover:text-emerald-700 font-medium underline underline-offset-4 cursor-pointer transition-colors"
+                >
+                  ✍️ Hoặc thi với tư cách Thí sinh tự do (Nhập họ tên khác)
+                </button>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleGuestJoin} className="space-y-4 pt-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-800 pb-1 border-b border-slate-100">
-                <UserCheck className="w-4 h-4 text-emerald-600" />
-                <span>Thí sinh tự do (Vào thi không cần đăng nhập trước)</span>
+              <div className="flex items-center justify-between text-xs font-bold text-slate-800 pb-1 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-emerald-600" />
+                  <span>Thí sinh tự do (Vào thi không cần tài khoản)</span>
+                </div>
+                {currentUser && (
+                  <button
+                    type="button"
+                    onClick={() => setForceGuestMode(false)}
+                    className="text-[11px] text-emerald-600 hover:text-emerald-800 font-semibold cursor-pointer"
+                  >
+                    ← Dùng tài khoản đã đăng nhập
+                  </button>
+                )}
               </div>
 
               <div>

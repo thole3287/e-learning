@@ -43,6 +43,9 @@ class ExamAttemptService
             if ($isEnrolled) {
                 $hasAccess = true;
             }
+        } elseif ($student->isTeacher() && $assignment->exam->creator_id === $student->id) {
+            // Giáo viên tạo đề có quyền vào làm thử bài thi của chính mình
+            $hasAccess = true;
         }
 
         if (!$hasAccess && !$student->isSuperAdmin()) {
