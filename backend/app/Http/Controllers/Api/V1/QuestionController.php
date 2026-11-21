@@ -51,7 +51,7 @@ class QuestionController extends Controller
             $query->where('content', 'like', "%{$request->search}%");
         }
 
-        $questions = $query->latest()->paginate($request->integer('per_page', 15));
+        $questions = $query->latest()->paginate($request->integer('per_page', 20));
 
         return response()->json([
             'success' => true,

@@ -330,14 +330,14 @@ export const ExamRoomView: React.FC = () => {
 
           {/* Options Section */}
           <div className="space-y-3 pt-2">
-            {currentQ.question_type === 'fill_in_blank' ? (
+            {currentQ.question_type === 'fill_in_blank' || currentQ.question_type === 'short_answer' ? (
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">Nhập đáp án của bạn:</label>
                 <input
                   type="text"
                   value={currentAns.text_answer}
                   onChange={(e) => handleTextChange(currentQ.id, e.target.value)}
-                  placeholder="Nhập câu trả lời ngắn..."
+                  placeholder="Nhập câu trả lời ngắn (chữ hoặc số)..."
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-sm focus:outline-none focus:border-indigo-600 font-medium"
                 />
               </div>

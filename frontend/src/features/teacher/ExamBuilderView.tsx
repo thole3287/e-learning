@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { Exam, Question } from '../../types';
 import { MathRenderer } from '../../components/math/MathRenderer';
 import mammoth from 'mammoth';
+import { extractDocxTextWithMath } from '../../utils/docxMathExtractor';
 import { parseExamText, ParsedExamResult, ParsedQuestion } from '../../utils/wordExamParser';
 import { generateExamDocx, downloadBlob, OfflineExamData } from '../../utils/docxExport';
 import {
@@ -274,7 +275,7 @@ export const ExamBuilderView: React.FC = () => {
   const fetchExams = async () => {
     setLoading(true);
     try {
-      const res: any = await api.get('/exams');
+      const res: any = await api.get('/exams', { params: { per_page: 20 } });
       if (res.success) {
         setExams(res.data);
       }
@@ -631,8 +632,7 @@ export const ExamBuilderView: React.FC = () => {
     setQuickWordParsing(true);
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const res = await mammoth.extractRawText({ arrayBuffer });
-      const rawText = res.value;
+      const rawText = await extractDocxTextWithMath(arrayBuffer);
       const parsed = parseExamText(rawText);
       setParsedExam(parsed);
 

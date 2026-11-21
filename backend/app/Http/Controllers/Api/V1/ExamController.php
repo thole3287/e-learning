@@ -54,7 +54,7 @@ class ExamController extends Controller
                 ->orWhere('code', 'like', "%{$request->search}%");
         }
 
-        $exams = $query->latest()->paginate($request->integer('per_page', 15));
+        $exams = $query->latest()->paginate($request->integer('per_page', 20));
 
         return response()->json([
             'success' => true,

@@ -219,7 +219,7 @@ export const ExamResultView: React.FC = () => {
                       })}
                     </div>
                   </div>
-                ) : q.question_type === 'fill_in_blank' ? (
+                ) : q.question_type === 'fill_in_blank' || q.question_type === 'short_answer' ? (
                   <div className="space-y-3 pt-1">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       {/* Câu trả lời của học sinh */}
