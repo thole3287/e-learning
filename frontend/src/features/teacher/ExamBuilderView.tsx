@@ -104,6 +104,22 @@ export const ExamBuilderView: React.FC = () => {
     setTimeout(() => setCopiedExamId(null), 2500);
   };
 
+  const formatScheduleDateTime = (dateStr?: string | null) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const hours = String(d.getHours()).padStart(2, '0');
+      const mins = String(d.getMinutes()).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${hours}:${mins} ${day}/${month}/${year}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
   const fetchQuickChapters = async (subId: number) => {
     try {
       const res: any = await api.get(`/subjects/${subId}/chapters`);
@@ -391,6 +407,13 @@ export const ExamBuilderView: React.FC = () => {
 
     setFilterLevel('all');
     setSearchKeyword('');
+    setQuickStartTime(getInitialDateTime(0));
+    setQuickEndTime(getInitialDateTime(7));
+    setQuickMaxAttempts(1);
+    setQuickIsPublicLink(true);
+    setQuickAssignClassIds([]);
+    setQuickTfMethod('moet');
+    setQuickTfWeights([10, 25, 50, 100]);
     setShowCreateModal(true);
   };
 
@@ -451,13 +474,24 @@ export const ExamBuilderView: React.FC = () => {
           3: sel3,
           4: sel4,
         },
+        start_time: quickStartTime ? new Date(quickStartTime).toISOString() : null,
+        end_time: quickEndTime ? new Date(quickEndTime).toISOString() : null,
+        max_attempts: quickMaxAttempts || 1,
+        is_public_link: quickIsPublicLink,
+        assign_class_ids: quickAssignClassIds,
+        tf_grading_method: quickTfMethod,
+        tf_grading_weights: quickTfWeights,
       };
 
       const res: any = await api.post('/exams', payload);
       if (res.success) {
-        alert('Tạo đề thi mới thành công! Bạn có thể giao đề cho lớp ngay bây giờ.');
         setShowCreateModal(false);
         fetchExams();
+        if (res.data) {
+          setCreatedExamSuccess(res.data);
+        } else {
+          alert('Tạo đề thi mới thành công! Bạn có thể giao đề cho lớp ngay bây giờ.');
+        }
       }
     } catch (err: any) {
       alert(err?.message || 'Có lỗi xảy ra khi tạo đề thi.');
@@ -673,14 +707,25 @@ export const ExamBuilderView: React.FC = () => {
         shuffle_options: createForm.shuffle_options,
         save_to_bank: true,
         questions: questionsList,
+        start_time: quickStartTime ? new Date(quickStartTime).toISOString() : null,
+        end_time: quickEndTime ? new Date(quickEndTime).toISOString() : null,
+        max_attempts: quickMaxAttempts || 1,
+        is_public_link: quickIsPublicLink,
+        assign_class_ids: quickAssignClassIds,
+        tf_grading_method: quickTfMethod,
+        tf_grading_weights: quickTfWeights,
       };
 
       const res: any = await api.post('/exams/quick-create', payload);
       if (res.success) {
-        alert('🎉 Đã tạo đề thi từ JSON / AI thành công!');
         setShowCreateModal(false);
         setJsonExamText('');
         fetchExams();
+        if (res.data) {
+          setCreatedExamSuccess(res.data);
+        } else {
+          alert('🎉 Đã tạo đề thi từ JSON / AI thành công!');
+        }
       }
     } catch (err: any) {
       alert(err?.message || 'Lỗi khi nhập đề từ JSON.');
@@ -896,24 +941,80 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                 >
                   {exam.title}
                 </h3>
-                <p className="text-xs text-slate-500 mt-1.5 line-clamp-2">
+                <p className="text-xs text-slate-500 mt-1 line-clamp-2">
                   {exam.description || 'Chưa có mô tả chi tiết'}
                 </p>
 
-                <div className="flex flex-wrap items-center gap-3.5 text-xs text-slate-500 mt-4 pt-3 border-t border-slate-100">
-                  <div className="flex items-center gap-1.5">
+                {/* Thông tin ngày thi, giờ thi & trạng thái mở đề */}
+                {(() => {
+                  const startTime = exam.settings?.start_time || exam.assignments?.[0]?.start_time;
+                  const endTime = exam.settings?.end_time || exam.assignments?.[0]?.end_time;
+                  const now = new Date();
+                  const isUpcoming = startTime ? new Date(startTime) > now : false;
+                  const isExpired = endTime ? new Date(endTime) < now : false;
+                  const hasSchedule = !!(startTime || endTime);
+
+                  return (
+                    <div className="mt-3 pt-2.5 border-t border-dashed border-slate-100 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400 font-medium">Lịch thi:</span>
+                        {isExpired ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                            🔴 Đã hết hạn
+                          </span>
+                        ) : isUpcoming ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            🟡 Sắp mở
+                          </span>
+                        ) : hasSchedule ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            🟢 Đang mở thi
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-50 text-slate-500 border border-slate-200">
+                            Mở tự do
+                          </span>
+                        )}
+                      </div>
+
+                      {hasSchedule ? (
+                        <div className="bg-slate-50/80 rounded-lg p-2 text-[11px] text-slate-600 space-y-0.5">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="text-slate-400 font-medium shrink-0">Bắt đầu:</span>
+                            <span className="font-semibold text-slate-700 truncate">
+                              {startTime ? formatScheduleDateTime(startTime) : 'Mở ngay'}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="text-slate-400 font-medium shrink-0">Hạn chót:</span>
+                            <span className={`font-semibold truncate ${isExpired ? 'text-rose-600 font-bold' : 'text-slate-700'}`}>
+                              {endTime ? formatScheduleDateTime(endTime) : 'Không giới hạn'}
+                            </span>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+
+                <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-500 mt-2.5 pt-2.5 border-t border-slate-100">
+                  <div className="flex items-center gap-1" title="Thời gian làm bài">
                     <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{exam.duration_minutes} phút</span>
+                    <span>{exam.duration_minutes}p</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1" title="Số lượng câu hỏi">
                     <FileText className="w-3.5 h-3.5 text-slate-400" />
                     <span>{exam.exam_questions_count || 0} câu</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-indigo-600 font-medium" title="Lượt xem / truy cập đề thi">
+                  <div className="flex items-center gap-1 text-emerald-600 font-bold" title="Lượt học sinh đã nộp bài thi">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>{exam.attempts_count || 0} lượt nộp</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-indigo-600 font-medium" title="Lượt truy cập xem đề thi">
                     <Eye className="w-3.5 h-3.5 text-indigo-500" />
                     <span>{exam.settings?.views_count || 0} xem</span>
                   </div>
-                  <div className="flex items-center gap-1.5 font-semibold text-slate-700 ml-auto">
+                  <div className="flex items-center gap-1 font-semibold text-slate-700 ml-auto">
                     <span>Thang {exam.total_points}đ</span>
                   </div>
                 </div>
@@ -1117,6 +1218,236 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                   />
                 </div>
 
+                {/* CẤU HÌNH TÍNH ĐIỂM ĐÚNG / SAI (PHẦN II) */}
+                <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200/80 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-bold text-amber-950 text-xs">
+                      <CheckCircle2 className="w-4 h-4 text-amber-600" />
+                      <span>Quy Tắc Tính Điểm Câu Đúng / Sai (Phần II - 4 ý a, b, c, d)</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleTfMethodChange('moet')}
+                      className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                        quickTfMethod === 'moet'
+                          ? 'bg-white border-amber-500 ring-1 ring-amber-500 shadow-xs'
+                          : 'bg-white/60 border-amber-200/70 hover:bg-white'
+                      }`}
+                    >
+                      <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                        <span>Chuẩn Bộ GD&ĐT (2018)</span>
+                        {quickTfMethod === 'moet' && <Check className="w-3.5 h-3.5 text-amber-600" />}
+                      </div>
+                      <div className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                        1 ý: 10% (0.1đ/1đ) • 2 ý: 25% (0.25đ)<br />
+                        3 ý: 50% (0.5đ) • 4 ý: 100% (1.0đ)
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleTfMethodChange('equal')}
+                      className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                        quickTfMethod === 'equal'
+                          ? 'bg-white border-amber-500 ring-1 ring-amber-500 shadow-xs'
+                          : 'bg-white/60 border-amber-200/70 hover:bg-white'
+                      }`}
+                    >
+                      <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                        <span>Chia Đều (25%/ý)</span>
+                        {quickTfMethod === 'equal' && <Check className="w-3.5 h-3.5 text-amber-600" />}
+                      </div>
+                      <div className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                        1 ý: 25% (0.25đ) • 2 ý: 50% (0.5đ)<br />
+                        3 ý: 75% (0.75đ) • 4 ý: 100% (1.0đ)
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleTfMethodChange('custom')}
+                      className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                        quickTfMethod === 'custom'
+                          ? 'bg-white border-amber-500 ring-1 ring-amber-500 shadow-xs'
+                          : 'bg-white/60 border-amber-200/70 hover:bg-white'
+                      }`}
+                    >
+                      <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                        <span>Tự Nhập % Điểm</span>
+                        {quickTfMethod === 'custom' && <Check className="w-3.5 h-3.5 text-amber-600" />}
+                      </div>
+                      <div className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                        Tự do chỉnh % điểm cho 1, 2, 3, 4 ý theo yêu cầu của Thầy/Cô
+                      </div>
+                    </button>
+                  </div>
+
+                  {quickTfMethod === 'custom' && (
+                    <div className="mt-2 pt-2 border-t border-amber-200/80 flex flex-wrap items-center gap-3 bg-white p-2.5 rounded-lg">
+                      <span className="text-[11px] font-semibold text-slate-700">Tỷ lệ % khi đúng:</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] text-slate-500">1 ý:</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={quickTfWeights[0]}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setQuickTfWeights([val, quickTfWeights[1], quickTfWeights[2], quickTfWeights[3]]);
+                          }}
+                          className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                        />
+                        <span className="text-slate-400 text-xs">%</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] text-slate-500">2 ý:</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={quickTfWeights[1]}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setQuickTfWeights([quickTfWeights[0], val, quickTfWeights[2], quickTfWeights[3]]);
+                          }}
+                          className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                        />
+                        <span className="text-slate-400 text-xs">%</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] text-slate-500">3 ý:</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={quickTfWeights[2]}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setQuickTfWeights([quickTfWeights[0], quickTfWeights[1], val, quickTfWeights[3]]);
+                          }}
+                          className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                        />
+                        <span className="text-slate-400 text-xs">%</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] text-slate-500">4 ý:</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={quickTfWeights[3]}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setQuickTfWeights([quickTfWeights[0], quickTfWeights[1], quickTfWeights[2], val]);
+                          }}
+                          className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                        />
+                        <span className="text-slate-400 text-xs">%</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* THỜI GIAN MỞ THI TRỰC TUYẾN & HỌC SINH TỰ DO */}
+                <div className="p-3.5 bg-indigo-50/70 rounded-xl border border-indigo-200/80 space-y-3">
+                  <div className="flex items-center gap-1.5 font-bold text-indigo-950 text-xs">
+                    <Calendar className="w-4 h-4 text-indigo-600" />
+                    <span>Cài Đặt Thời Gian Mở Thi Online & Link Học Sinh Tự Do</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 text-[11px] mb-1">
+                        Bắt đầu mở thi (từ ngày/giờ)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={quickStartTime}
+                        onChange={(e) => setQuickStartTime(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 text-[11px] mb-1">
+                        Hạn chót nộp bài (đến ngày/giờ)
+                      </label>
+                      <input
+                        type="datetime-local"
+                        value={quickEndTime}
+                        onChange={(e) => setQuickEndTime(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 text-[11px] mb-1">
+                        Số lần làm bài tối đa
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={quickMaxAttempts}
+                        onChange={(e) => setQuickMaxAttempts(Number(e.target.value) || 1)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-center font-bold text-slate-800"
+                      />
+                    </div>
+                  </div>
+
+                  {classes.length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <label className="block font-semibold text-slate-700 text-[11px]">
+                        Giao đề thi ngay cho lớp học (tùy chọn)
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        {classes.map((cls) => {
+                          const isSelected = quickAssignClassIds.includes(cls.id);
+                          return (
+                            <button
+                              key={cls.id}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setQuickAssignClassIds(quickAssignClassIds.filter((id) => id !== cls.id));
+                                } else {
+                                  setQuickAssignClassIds([...quickAssignClassIds, cls.id]);
+                                }
+                              }}
+                              className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                                isSelected
+                                  ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              {cls.name} ({cls.students_count || 0} HS)
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={quickIsPublicLink}
+                      onChange={(e) => setQuickIsPublicLink(e.target.checked)}
+                      className="rounded text-indigo-600 focus:ring-indigo-500 mt-0.5"
+                    />
+                    <div>
+                      <div className="font-semibold text-indigo-950 text-xs">
+                        Tạo Link công khai cho Học Sinh Tự Do làm bài trực tiếp
+                      </div>
+                      <div className="text-[11px] text-slate-500 leading-snug">
+                        Học sinh không có tài khoản trường lớp chỉ cần bấm vào Link, nhập Họ & Tên + Tên Trường/Lớp là làm bài thi ngay không cần đăng nhập.
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
                 <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
                   <button
                     type="button"
@@ -1290,6 +1621,236 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                   placeholder="Ví dụ: Đề thi gồm các câu trắc nghiệm đơn, trắc nghiệm đúng sai và trả lời ngắn. Thí sinh làm bài nghiêm túc."
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs"
                 />
+              </div>
+
+              {/* CẤU HÌNH TÍNH ĐIỂM ĐÚNG / SAI (PHẦN II) */}
+              <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-200/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-950 text-xs">
+                    <CheckCircle2 className="w-4 h-4 text-amber-600" />
+                    <span>Quy Tắc Tính Điểm Câu Đúng / Sai (Phần II - 4 ý a, b, c, d)</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleTfMethodChange('moet')}
+                    className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                      quickTfMethod === 'moet'
+                        ? 'bg-white border-amber-500 ring-1 ring-amber-500 shadow-xs'
+                        : 'bg-white/60 border-amber-200/70 hover:bg-white'
+                    }`}
+                  >
+                    <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                      <span>Chuẩn Bộ GD&ĐT (2018)</span>
+                      {quickTfMethod === 'moet' && <Check className="w-3.5 h-3.5 text-amber-600" />}
+                    </div>
+                    <div className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                      1 ý: 10% (0.1đ/1đ) • 2 ý: 25% (0.25đ)<br />
+                      3 ý: 50% (0.5đ) • 4 ý: 100% (1.0đ)
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleTfMethodChange('equal')}
+                    className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                      quickTfMethod === 'equal'
+                        ? 'bg-white border-amber-500 ring-1 ring-amber-500 shadow-xs'
+                        : 'bg-white/60 border-amber-200/70 hover:bg-white'
+                    }`}
+                  >
+                    <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                      <span>Chia Đều (25%/ý)</span>
+                      {quickTfMethod === 'equal' && <Check className="w-3.5 h-3.5 text-amber-600" />}
+                    </div>
+                    <div className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                      1 ý: 25% (0.25đ) • 2 ý: 50% (0.5đ)<br />
+                      3 ý: 75% (0.75đ) • 4 ý: 100% (1.0đ)
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleTfMethodChange('custom')}
+                    className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                      quickTfMethod === 'custom'
+                        ? 'bg-white border-amber-500 ring-1 ring-amber-500 shadow-xs'
+                        : 'bg-white/60 border-amber-200/70 hover:bg-white'
+                    }`}
+                  >
+                    <div className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                      <span>Tự Nhập % Điểm</span>
+                      {quickTfMethod === 'custom' && <Check className="w-3.5 h-3.5 text-amber-600" />}
+                    </div>
+                    <div className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                      Tự do chỉnh % điểm cho 1, 2, 3, 4 ý theo yêu cầu của Thầy/Cô
+                    </div>
+                  </button>
+                </div>
+
+                {quickTfMethod === 'custom' && (
+                  <div className="mt-2 pt-2 border-t border-amber-200/80 flex flex-wrap items-center gap-3 bg-white p-2.5 rounded-lg">
+                    <span className="text-[11px] font-semibold text-slate-700">Tỷ lệ % khi đúng:</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] text-slate-500">1 ý:</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={quickTfWeights[0]}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setQuickTfWeights([val, quickTfWeights[1], quickTfWeights[2], quickTfWeights[3]]);
+                        }}
+                        className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                      />
+                      <span className="text-slate-400 text-xs">%</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] text-slate-500">2 ý:</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={quickTfWeights[1]}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setQuickTfWeights([quickTfWeights[0], val, quickTfWeights[2], quickTfWeights[3]]);
+                        }}
+                        className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                      />
+                      <span className="text-slate-400 text-xs">%</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] text-slate-500">3 ý:</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={quickTfWeights[2]}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setQuickTfWeights([quickTfWeights[0], quickTfWeights[1], val, quickTfWeights[3]]);
+                        }}
+                        className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                      />
+                      <span className="text-slate-400 text-xs">%</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[11px] text-slate-500">4 ý:</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={quickTfWeights[3]}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          setQuickTfWeights([quickTfWeights[0], quickTfWeights[1], quickTfWeights[2], val]);
+                        }}
+                        className="w-14 border border-slate-300 rounded px-1.5 py-0.5 text-center font-bold text-xs"
+                      />
+                      <span className="text-slate-400 text-xs">%</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* THỜI GIAN MỞ THI TRỰC TUYẾN & HỌC SINH TỰ DO */}
+              <div className="p-3.5 bg-indigo-50/70 rounded-xl border border-indigo-200/80 space-y-3">
+                <div className="flex items-center gap-1.5 font-bold text-indigo-950 text-xs">
+                  <Calendar className="w-4 h-4 text-indigo-600" />
+                  <span>Cài Đặt Thời Gian Mở Thi Online & Link Học Sinh Tự Do</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 text-[11px] mb-1">
+                      Bắt đầu mở thi (từ ngày/giờ)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={quickStartTime}
+                      onChange={(e) => setQuickStartTime(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 text-[11px] mb-1">
+                      Hạn chót nộp bài (đến ngày/giờ)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={quickEndTime}
+                      onChange={(e) => setQuickEndTime(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-700 text-[11px] mb-1">
+                      Số lần làm bài tối đa
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={quickMaxAttempts}
+                      onChange={(e) => setQuickMaxAttempts(Number(e.target.value) || 1)}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-center font-bold text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                {classes.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <label className="block font-semibold text-slate-700 text-[11px]">
+                      Giao đề thi ngay cho lớp học (tùy chọn)
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {classes.map((cls) => {
+                        const isSelected = quickAssignClassIds.includes(cls.id);
+                        return (
+                          <button
+                            key={cls.id}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setQuickAssignClassIds(quickAssignClassIds.filter((id) => id !== cls.id));
+                              } else {
+                                setQuickAssignClassIds([...quickAssignClassIds, cls.id]);
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            {cls.name} ({cls.students_count || 0} HS)
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={quickIsPublicLink}
+                    onChange={(e) => setQuickIsPublicLink(e.target.checked)}
+                    className="rounded text-indigo-600 focus:ring-indigo-500 mt-0.5"
+                  />
+                  <div>
+                    <div className="font-semibold text-indigo-950 text-xs">
+                      Tạo Link công khai cho Học Sinh Tự Do làm bài trực tiếp
+                    </div>
+                    <div className="text-[11px] text-slate-500 leading-snug">
+                      Học sinh không có tài khoản trường lớp chỉ cần bấm vào Link, nhập Họ & Tên + Tên Trường/Lớp là làm bài thi ngay không cần đăng nhập.
+                    </div>
+                  </div>
+                </label>
               </div>
 
               {/* ================= KHU VỰC THIẾT LẬP MA TRẬN MỨC ĐỘ NHẬN THỨC ================= */}

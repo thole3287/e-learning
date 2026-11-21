@@ -30,7 +30,7 @@ class ExamController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Exam::with(['subject', 'grade', 'creator'])->withCount(['examQuestions', 'assignments', 'attempts']);
+        $query = Exam::with(['subject', 'grade', 'creator', 'assignments'])->withCount(['examQuestions', 'assignments', 'attempts']);
 
         if ($user->isTeacher()) {
             $query->where('creator_id', $user->id);
@@ -80,6 +80,14 @@ class ExamController extends Controller
             'question_ids' => 'nullable|array',
             'question_ids.*' => 'exists:questions,id',
             'matrix_levels' => 'nullable|array',
+            'start_time' => 'nullable|date',
+            'end_time' => 'nullable|date',
+            'max_attempts' => 'nullable|integer|min:1|max:10',
+            'is_public_link' => 'nullable|boolean',
+            'tf_grading_method' => 'nullable|string',
+            'tf_grading_weights' => 'nullable|array',
+            'assign_class_ids' => 'nullable|array',
+            'assign_class_ids.*' => 'exists:classes,id',
         ]);
 
         $validated['creator_id'] = $request->user()->id;
@@ -92,6 +100,17 @@ class ExamController extends Controller
 
         $exam = DB::transaction(function () use ($validated, $questionIds, $matrixLevels, $totalPoints) {
             $exam = Exam::create($validated);
+
+            // Cấu hình settings
+            $settings = [
+                'tf_grading_method' => $validated['tf_grading_method'] ?? 'moet',
+                'tf_grading_weights' => $validated['tf_grading_weights'] ?? [10, 25, 50, 100],
+                'is_public_link' => $validated['is_public_link'] ?? true,
+                'max_attempts' => $validated['max_attempts'] ?? 1,
+                'views_count' => 0,
+            ];
+            $exam->settings = $settings;
+            $exam->save();
 
             // Gán câu hỏi chọn thủ công nếu có
             if (!empty($questionIds)) {
@@ -112,13 +131,48 @@ class ExamController extends Controller
                 ]);
             }
 
+            $startTime = !empty($validated['start_time']) ? new \DateTime($validated['start_time']) : now();
+            $endTime = !empty($validated['end_time']) ? new \DateTime($validated['end_time']) : now()->addDays(7);
+
+            // Giao đề công khai cho học sinh tự do nếu được bật
+            if ($settings['is_public_link']) {
+                ExamAssignment::create([
+                    'exam_id' => $exam->id,
+                    'class_id' => null,
+                    'student_id' => null,
+                    'assigned_by' => $exam->creator_id,
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
+                    'max_attempts' => $settings['max_attempts'],
+                    'view_score_type' => 'immediately',
+                    'show_solutions' => true,
+                ]);
+            }
+
+            // Giao ngay cho các lớp học chọn trước
+            if (!empty($validated['assign_class_ids'])) {
+                foreach ($validated['assign_class_ids'] as $classId) {
+                    ExamAssignment::create([
+                        'exam_id' => $exam->id,
+                        'class_id' => $classId,
+                        'student_id' => null,
+                        'assigned_by' => $exam->creator_id,
+                        'start_time' => $startTime,
+                        'end_time' => $endTime,
+                        'max_attempts' => $settings['max_attempts'],
+                        'view_score_type' => 'immediately',
+                        'show_solutions' => true,
+                    ]);
+                }
+            }
+
             return $exam;
         });
 
         return response()->json([
             'success' => true,
             'message' => 'Tạo đề thi thành công',
-            'data' => $exam->load(['subject', 'grade', 'examQuestions']),
+            'data' => $exam->load(['subject', 'grade', 'examQuestions', 'assignments']),
         ], 201);
     }
 
@@ -611,7 +665,7 @@ class ExamController extends Controller
         $email = $username . '@hochoa247.io.vn';
 
         $guestUser = User::create([
-            'name' => $cleanName . (!empty($validated['class_name']) ? ' (' . $validated['class_name'] . ')' : ''),
+            'full_name' => $cleanName . (!empty($validated['class_name']) ? ' (' . $validated['class_name'] . ')' : ''),
             'username' => $username,
             'email' => $email,
             'phone' => $validated['phone'] ?? null,

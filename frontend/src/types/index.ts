@@ -46,6 +46,16 @@ export interface Exam {
   status: 'draft' | 'published' | 'closed' | 'archived';
   subject?: { id: number; name: string };
   exam_questions_count?: number;
+  attempts_count?: number;
+  assignments_count?: number;
+  assignments?: Array<{
+    id: number;
+    start_time: string;
+    end_time: string;
+    max_attempts?: number;
+    class_id?: number | null;
+    school_class?: { id: number; name: string };
+  }>;
   settings?: {
     tf_grading_method?: string;
     tf_grading_weights?: number[];

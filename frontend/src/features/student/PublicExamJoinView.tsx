@@ -240,15 +240,46 @@ export const PublicExamJoinView: React.FC = () => {
           </div>
 
           {/* KHU VỰC THÍ SINH VÀO PHÒNG THI */}
-          {currentUser ? (
+          {!exam.is_open ? (
+            <div
+              className={`p-6 rounded-2xl border text-center space-y-3 ${
+                exam.status_label === 'upcoming'
+                  ? 'bg-amber-50/90 border-amber-200 text-amber-950'
+                  : 'bg-rose-50/90 border-rose-200 text-rose-950'
+              }`}
+            >
+              <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center text-3xl shadow-xs bg-white border border-slate-100">
+                {exam.status_label === 'upcoming' ? '⏳' : '⛔'}
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="font-extrabold text-sm sm:text-base">
+                  {exam.status_label === 'upcoming'
+                    ? 'Phòng Thi Chưa Đến Giờ Mở!'
+                    : 'Đã Hết Thời Gian Làm Bài Thi!'}
+                </h3>
+                <p className="text-xs leading-relaxed opacity-90 max-w-md mx-auto">
+                  {exam.status_label === 'upcoming'
+                    ? `Đề thi sẽ chính thức mở vào lúc ${formatDate(exam.start_time)}. Thí sinh vui lòng quay lại đúng giờ để vào làm bài.`
+                    : `Thời gian nộp bài thi đã kết thúc vào lúc ${formatDate(exam.end_time)}. Hiện tại phòng thi đã đóng và không thể nộp bài thêm.`}
+                </p>
+                {exam.status_label !== 'upcoming' && (
+                  <p className="text-[11px] pt-1 font-semibold text-rose-700">
+                    💡 Thí sinh vui lòng liên hệ Giáo viên phụ trách ({exam.creator_name}) nếu cần hỗ trợ gia hạn thời gian làm bài.
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : currentUser ? (
             <div className="space-y-4 pt-2">
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm">
-                    {currentUser.name.charAt(0).toUpperCase()}
+                    {(currentUser.full_name || currentUser.name || 'H').charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <div className="text-xs font-bold text-slate-900">{currentUser.name}</div>
+                    <div className="text-xs font-bold text-slate-900">
+                      {currentUser.full_name || currentUser.name || 'Học sinh'}
+                    </div>
                     <div className="text-[11px] text-slate-500">{currentUser.email || currentUser.username}</div>
                   </div>
                 </div>
