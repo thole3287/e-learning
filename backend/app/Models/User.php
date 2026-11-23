@@ -22,6 +22,7 @@ class User extends Authenticatable
         'password',
         'full_name',
         'role',
+        'is_guest',
         'code',
         'phone',
         'avatar_url',
@@ -35,13 +36,31 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    protected $appends = [
+        'is_guest',
+    ];
+
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'date_of_birth' => 'date',
+            'is_guest' => 'boolean',
         ];
+    }
+
+    public function getIsGuestAttribute(): bool
+    {
+        if (isset($this->attributes['is_guest'])) {
+            return (bool) $this->attributes['is_guest'];
+        }
+        return str_starts_with($this->username ?? '', 'hs_') && (str_contains($this->email ?? '', '@hochoa247.io.vn') || str_contains($this->email ?? '', 'guest'));
+    }
+
+    public function isGuest(): bool
+    {
+        return $this->is_guest;
     }
 
     public function isSuperAdmin(): bool

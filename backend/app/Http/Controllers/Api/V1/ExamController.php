@@ -773,6 +773,7 @@ class ExamController extends Controller
             'phone' => $validated['phone'] ?? null,
             'password' => bcrypt(Str::random(16)),
             'role' => 'student',
+            'is_guest' => true,
             'status' => 'active',
         ]);
 

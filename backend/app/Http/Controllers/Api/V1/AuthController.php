@@ -43,6 +43,7 @@ class AuthController extends Controller
                 'email' => $user->email,
                 'full_name' => $user->full_name,
                 'role' => $user->role,
+                'is_guest' => (bool) $user->is_guest,
                 'code' => $user->code,
                 'phone' => $user->phone,
                 'avatar_url' => $user->avatar_url,

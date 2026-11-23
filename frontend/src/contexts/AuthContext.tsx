@@ -6,7 +6,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (userData: User, token: string) => void;
-  logout: () => void;
+  logout: (redirectUrl?: string) => void;
   isLoading: boolean;
 }
 
@@ -40,7 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('auth_user', JSON.stringify(userData));
   };
 
-  const logout = async () => {
+  const logout = async (redirectUrl: string = '/login') => {
     try {
       if (token) {
         await api.post('/auth/logout');
@@ -52,7 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(null);
       localStorage.removeItem('auth_token');
       localStorage.removeItem('auth_user');
-      window.location.href = '/login';
+      window.location.href = redirectUrl;
     }
   };
 

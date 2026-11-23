@@ -32,7 +32,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: strin
   children,
   allowedRoles,
 }) => {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, logout } = useAuth();
 
   if (isLoading) {
     return (
@@ -44,6 +44,15 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: strin
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Thí sinh tự do (Guest) chỉ được phép ở trong các trang phòng thi / kết quả thi
+  if (user.is_guest) {
+    const isAllowedGuestRoute = window.location.pathname.startsWith('/exam/');
+    if (!isAllowedGuestRoute) {
+      logout('/login');
+      return <Navigate to="/login" replace />;
+    }
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
@@ -58,13 +67,18 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: strin
 
 // Root Redirect Component
 const RootRedirect: React.FC = () => {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, logout } = useAuth();
 
   if (isLoading) {
     return <div className="min-h-screen bg-slate-900" />;
   }
 
   if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.is_guest) {
+    logout('/login');
     return <Navigate to="/login" replace />;
   }
 

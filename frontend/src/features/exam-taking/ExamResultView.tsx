@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { ExamResultData } from '../../types';
 import { MathRenderer } from '../../components/math/MathRenderer';
-import { Award, CheckCircle2, XCircle, AlertCircle, ArrowLeft, Home } from 'lucide-react';
+import { Award, CheckCircle2, XCircle, AlertCircle, ArrowLeft, Home, LogOut } from 'lucide-react';
 
 export const ExamResultView: React.FC = () => {
   const { attemptId } = useParams();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const [result, setResult] = useState<ExamResultData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,10 +43,16 @@ export const ExamResultView: React.FC = () => {
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 text-center">
         <h2 className="text-base font-bold text-slate-800">Không tìm thấy kết quả</h2>
         <button
-          onClick={() => navigate('/student/dashboard')}
+          onClick={() => {
+            if (user?.is_guest) {
+              logout('/login');
+            } else {
+              navigate('/student/dashboard');
+            }
+          }}
           className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs"
         >
-          Quay lại Bàn làm việc
+          {user?.is_guest ? 'Quay lại Trang Đăng Nhập' : 'Quay lại Bàn làm việc'}
         </button>
       </div>
     );
@@ -95,14 +103,49 @@ export const ExamResultView: React.FC = () => {
             </div>
           )}
 
-          <div className="flex justify-center gap-3 pt-2">
-            <button
-              onClick={() => navigate('/student/dashboard')}
-              className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all"
-            >
-              <Home className="w-4 h-4" />
-              <span>Về Trang Chủ Học Sinh</span>
-            </button>
+          {/* Nút hành động */}
+          <div className="pt-2 space-y-3">
+            {user?.is_guest ? (
+              <div className="space-y-3 max-w-md mx-auto">
+                <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl text-xs text-amber-900 text-center space-y-1">
+                  <div className="font-bold flex items-center justify-center gap-1.5">
+                    <span>👤 Phiên làm bài của Thí sinh tự do</span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 leading-relaxed">
+                    Kết quả bài thi đã được lưu và gửi trực tiếp tới Giáo viên phụ trách. Bạn tham gia tự do nên không sử dụng tài khoản học sinh nội bộ của trường.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-3">
+                  {result.code && (
+                    <button
+                      onClick={() => navigate(`/exam/${result.code}`)}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all cursor-pointer"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>Xem Lại Thông Tin Đề</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => logout(result.code ? `/exam/${result.code}` : '/login')}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Hoàn Tất & Rời Phòng Thi</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={() => navigate('/student/dashboard')}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                >
+                  <Home className="w-4 h-4" />
+                  <span>Về Trang Chủ Học Sinh</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

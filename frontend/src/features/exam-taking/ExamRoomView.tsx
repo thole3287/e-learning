@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { ExamRoomData, Question } from '../../types';
 import { MathRenderer } from '../../components/math/MathRenderer';
 import { Clock, Flag, CheckCircle2, XCircle, AlertTriangle, ArrowLeft, ArrowRight, Send, Check } from 'lucide-react';
@@ -8,6 +9,7 @@ import { Clock, Flag, CheckCircle2, XCircle, AlertTriangle, ArrowLeft, ArrowRigh
 export const ExamRoomView: React.FC = () => {
   const { assignmentId } = useParams();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const [examData, setExamData] = useState<ExamRoomData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,7 +94,11 @@ export const ExamRoomView: React.FC = () => {
         navigate(`/exam/result/${examData.attempt_id}`);
       }
     } catch {
-      navigate('/student/dashboard');
+      if (user?.is_guest) {
+        logout('/login');
+      } else {
+        navigate('/student/dashboard');
+      }
     }
   };
 
@@ -234,10 +240,16 @@ export const ExamRoomView: React.FC = () => {
         <h2 className="text-xl font-bold mb-2">Không Thể Vào Phòng Thi</h2>
         <p className="text-slate-400 text-xs max-w-md mb-6">{error}</p>
         <button
-          onClick={() => navigate('/student/dashboard')}
-          className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-semibold"
+          onClick={() => {
+            if (user?.is_guest) {
+              logout('/login');
+            } else {
+              navigate('/student/dashboard');
+            }
+          }}
+          className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
         >
-          Quay lại Bàn làm việc
+          {user?.is_guest ? 'Thoát Ra Trang Chủ' : 'Quay lại Bàn làm việc'}
         </button>
       </div>
     );

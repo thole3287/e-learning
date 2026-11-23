@@ -6,6 +6,7 @@ export interface User {
   email: string;
   full_name: string;
   role: UserRole;
+  is_guest?: boolean;
   code?: string;
   phone?: string;
   avatar_url?: string;
@@ -118,6 +119,7 @@ export interface ExamRoomData {
 export interface ExamResultData {
   attempt_id: number;
   exam_id: number;
+  code?: string;
   title: string;
   status: string;
   submitted_at: string;

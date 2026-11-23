@@ -291,6 +291,7 @@ class ExamAttemptService
         $response = [
             'attempt_id' => $attempt->id,
             'exam_id' => $attempt->exam_id,
+            'code' => $attempt->exam->code,
             'title' => $attempt->exam->title,
             'status' => $attempt->status,
             'submitted_at' => $attempt->submitted_at?->toISOString(),
