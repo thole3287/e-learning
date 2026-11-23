@@ -50,12 +50,20 @@ class User extends Authenticatable
         ];
     }
 
+    public function getRoleAttribute($value): string
+    {
+        if ($this->is_guest) {
+            return 'guest';
+        }
+        return $value ?? 'student';
+    }
+
     public function getIsGuestAttribute(): bool
     {
-        if (isset($this->attributes['is_guest'])) {
-            return (bool) $this->attributes['is_guest'];
+        if (isset($this->attributes['is_guest']) && $this->attributes['is_guest']) {
+            return true;
         }
-        return str_starts_with($this->username ?? '', 'hs_') && (str_contains($this->email ?? '', '@hochoa247.io.vn') || str_contains($this->email ?? '', 'guest'));
+        return str_starts_with($this->username ?? '', 'hs_') || str_contains($this->email ?? '', '@hochoa247.io.vn');
     }
 
     public function isGuest(): bool

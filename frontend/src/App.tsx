@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginView } from './features/auth/LoginView';
 import { DashboardLayout } from './layouts/DashboardLayout';
@@ -27,12 +27,22 @@ import { ExamRoomView } from './features/exam-taking/ExamRoomView';
 import { ExamResultView } from './features/exam-taking/ExamResultView';
 import { PublicExamJoinView } from './features/student/PublicExamJoinView';
 
+export const isGuestUser = (user: any): boolean => {
+  if (!user) return false;
+  if (user.is_guest === true || user.is_guest === 1 || user.is_guest === '1') return true;
+  if (user.role === 'guest') return true;
+  if (typeof user.username === 'string' && user.username.startsWith('hs_')) return true;
+  if (typeof user.email === 'string' && (user.email.includes('@hochoa247.io.vn') || user.email.includes('guest'))) return true;
+  return false;
+};
+
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({
   children,
   allowedRoles,
 }) => {
   const { user, isLoading, logout } = useAuth();
+  const location = useLocation();
 
   if (isLoading) {
     return (
@@ -42,24 +52,32 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: strin
     );
   }
 
+  // 1. Chưa đăng nhập: Tuyệt đối không cho vào bất kỳ trang bảo vệ nào
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Thí sinh tự do (Guest) chỉ được phép ở trong các trang phòng thi / kết quả thi
-  if (user.is_guest) {
-    const isAllowedGuestRoute = window.location.pathname.startsWith('/exam/');
-    if (!isAllowedGuestRoute) {
+  const isGuest = isGuestUser(user);
+
+  // 2. Thí sinh tự do (Guest): CHỈ được phép ở phòng thi hoặc xem kết quả bài thi
+  if (isGuest) {
+    const isExamTakingRoute = location.pathname.startsWith('/exam/room/') || location.pathname.startsWith('/exam/result/');
+    if (!isExamTakingRoute) {
       logout('/login');
       return <Navigate to="/login" replace />;
     }
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    // Điều hướng về trang chủ tương ứng với vai trò
-    if (user.role === 'super_admin') return <Navigate to="/admin/dashboard" replace />;
-    if (user.role === 'teacher') return <Navigate to="/teacher/dashboard" replace />;
-    return <Navigate to="/student/dashboard" replace />;
+  // 3. Kiểm tra vai trò được phép (RBAC)
+  const currentRole = isGuest ? 'guest' : user.role;
+  if (allowedRoles && !allowedRoles.includes(currentRole)) {
+    if (currentRole === 'super_admin') return <Navigate to="/admin/dashboard" replace />;
+    if (currentRole === 'teacher') return <Navigate to="/teacher/dashboard" replace />;
+    if (currentRole === 'student') return <Navigate to="/student/dashboard" replace />;
+
+    // Vai trò không hợp lệ (như guest vào /student): đăng xuất sạch và chuyển về /login
+    logout('/login');
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;
@@ -77,14 +95,17 @@ const RootRedirect: React.FC = () => {
     return <Navigate to="/login" replace />;
   }
 
-  if (user.is_guest) {
+  if (isGuestUser(user)) {
     logout('/login');
     return <Navigate to="/login" replace />;
   }
 
   if (user.role === 'super_admin') return <Navigate to="/admin/dashboard" replace />;
   if (user.role === 'teacher') return <Navigate to="/teacher/dashboard" replace />;
-  return <Navigate to="/student/dashboard" replace />;
+  if (user.role === 'student') return <Navigate to="/student/dashboard" replace />;
+
+  logout('/login');
+  return <Navigate to="/login" replace />;
 };
 
 export const App: React.FC = () => {
@@ -160,7 +181,7 @@ export const App: React.FC = () => {
           <Route
             path="/exam/room/:assignmentId"
             element={
-              <ProtectedRoute allowedRoles={['student', 'teacher', 'super_admin']}>
+              <ProtectedRoute allowedRoles={['student', 'teacher', 'super_admin', 'guest']}>
                 <ExamRoomView />
               </ProtectedRoute>
             }
@@ -170,7 +191,7 @@ export const App: React.FC = () => {
           <Route
             path="/exam/result/:attemptId"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['student', 'teacher', 'super_admin', 'guest']}>
                 <ExamResultView />
               </ProtectedRoute>
             }

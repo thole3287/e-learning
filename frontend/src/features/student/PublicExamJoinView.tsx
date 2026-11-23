@@ -129,11 +129,12 @@ export const PublicExamJoinView: React.FC = () => {
       });
 
       if (res.success && res.data?.token && res.data?.assignment_id) {
-        if (res.data?.user) {
-          login(res.data.user, res.data.token);
-        } else {
-          localStorage.setItem('auth_token', res.data.token);
-        }
+        const guestUserObj = {
+          ...(res.data?.user || {}),
+          role: 'guest' as const,
+          is_guest: true,
+        };
+        login(guestUserObj, res.data.token);
         navigate(`/exam/room/${res.data.assignment_id}`);
       } else {
         alert(res.message || 'Không thể tạo phiên thi tự do.');

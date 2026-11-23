@@ -809,8 +809,11 @@ class ExamController extends Controller
                 'token' => $token,
                 'user' => [
                     'id' => $guestUser->id,
-                    'name' => $guestUser->full_name ?? $guestUser->username,
-                    'role' => 'student',
+                    'username' => $guestUser->username,
+                    'email' => $guestUser->email,
+                    'full_name' => $guestUser->full_name ?? $guestUser->username,
+                    'role' => 'guest',
+                    'is_guest' => true,
                 ],
                 'assignment_id' => $assignment->id,
                 'attempt_id' => $payload['attempt_id'] ?? null,

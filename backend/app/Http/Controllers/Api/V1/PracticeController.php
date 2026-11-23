@@ -26,6 +26,11 @@ class PracticeController extends Controller
      */
     public function getMatrixInfo(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if ($user->is_guest || $user->role === 'guest') {
+            return response()->json(['success' => false, 'message' => 'Tính năng này chỉ dành cho học sinh chính thức.'], 403);
+        }
+
         $subjectId = $request->integer('subject_id', 3); // Mặc định Hóa học hoặc Toán
         $subject = Subject::find($subjectId) ?? Subject::first();
 
@@ -107,6 +112,10 @@ class PracticeController extends Controller
     public function start(Request $request): JsonResponse
     {
         $user = $request->user();
+        if ($user->is_guest || $user->role === 'guest') {
+            return response()->json(['success' => false, 'message' => 'Tính năng này chỉ dành cho học sinh chính thức.'], 403);
+        }
+
         $subjectId = $request->integer('subject_id', 3);
         $subject = Subject::findOrFail($subjectId);
 

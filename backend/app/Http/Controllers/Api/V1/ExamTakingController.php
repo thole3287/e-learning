@@ -24,6 +24,13 @@ class ExamTakingController extends Controller
     public function getStudentExams(Request $request): JsonResponse
     {
         $student = $request->user();
+        if ($student->is_guest || $student->role === 'guest') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Thí sinh tự do không có quyền truy cập Bàn làm việc học sinh.',
+            ], 403);
+        }
+
         $enrolledClassIds = $student->enrolledClasses()->pluck('classes.id')->toArray();
 
         $assignments = ExamAssignment::with(['exam.subject:id,name,code'])
