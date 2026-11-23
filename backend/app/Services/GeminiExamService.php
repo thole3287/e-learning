@@ -174,15 +174,17 @@ class GeminiExamService
             $text = trim($text);
         }
 
-        // 1. Tự động escape các lệnh LaTeX từ 2 ký tự trở lên (\frac, \text, \to, \rightarrow, \ce, \sqrt, \alpha, \pm,...)
-        // Bắt mọi lệnh LaTeX có 1 dấu \ để chuyển thành 2 dấu \\
-        $text = preg_replace('/(?<!\\\\)\\\\([a-zA-Z]{2,25}|[0-9]+|\{|\}|\[|\]|\%|\_)/', '\\\\\\\\$1', $text);
+        // 1. Tự động escape các lệnh LaTeX từ 2 ký tự trở lên (\frac, \text, \to, \rightarrow, \ce, \sqrt, \alpha, \beta, \Delta, \pm,...)
+        $text = preg_replace('/(?<!\\\\)\\\\([a-zA-Z]{2,25})/', '\\\\\\\\$1', $text);
 
-        // 2. Escape các ký hiệu 1 ký tự trong toán/hóa học (, : ; !)
-        $text = preg_replace('/(?<!\\\\)\\\\([,:;!])/', '\\\\\\\\$1', $text);
+        // 2. Escape các ký hiệu toán/hóa học, dấu ngoặc và ký tự đặc biệt LaTeX: \( \) \[ \] \{ \} \% \_ \$ \# \& \: \, \; \! \+ \- \* \= \< \> \| \~ \^ \. \/
+        $text = preg_replace('/(?<!\\\\)\\\\([()[\]{}%_$#&:,;!+\-*=<>|~^.\/])/', '\\\\\\\\$1', $text);
 
-        // 3. Escape các backslash đơn đứng trước các ký tự không phải escape JSON chuẩn (n, r, t, b, f, u, ", \)
+        // 3. Escape các backslash đơn đứng trước chữ cái đơn không phải escape JSON chuẩn (b, f, n, r, t, u, ", \)
         $text = preg_replace('/(?<!\\\\)\\\\([acdeg-hijklmopqsv-wxyzAC-Z])/', '\\\\\\\\$1', $text);
+
+        // 4. Escape các backslash đứng cô lập theo sau bởi khoảng trắng
+        $text = preg_replace('/(?<!\\\\)\\\\(\s+)/', '\\\\\\\\$1', $text);
 
         return $text;
     }

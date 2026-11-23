@@ -9,22 +9,35 @@ interface MathRendererProps {
 export const MathRenderer: React.FC<MathRendererProps> = ({ content, className = '' }) => {
   if (!content) return null;
 
-  // Tách văn bản và biểu thức toán ($...$ hoặc $$...$$)
+  // Tách văn bản và biểu thức toán/hóa học:
+  // 1. Display math: $$...$$ hoặc \[...\]
+  // 2. Inline math: $...$ hoặc \(...\)
+  // 3. Công thức hóa học độc lập: \ce{...}
   const renderFormattedText = () => {
-    // Regex tìm $...$ (inline) hoặc $$...$$ (display)
-    const parts = content.split(/(\$\$[\s\S]*?\$\$|\$[\s\S]*?\$)/g);
+    const parts = content.split(/(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\$[^\$\n]+?\$|\\\(.*?\\\)|\s*(?:\\ce\{[^}]+\}))/g);
 
     return parts.map((part, index) => {
-      if (part.startsWith('$$') && part.endsWith('$$')) {
-        const math = part.slice(2, -2);
+      if (!part) return null;
+      const trimmed = part.trim();
+
+      // Display math
+      if ((trimmed.startsWith('$$') && trimmed.endsWith('$$')) || (trimmed.startsWith('\\[') && trimmed.endsWith('\\]'))) {
+        const math = trimmed.slice(2, -2).trim();
+        if (!math) return null;
         try {
           const html = katex.renderToString(math, { displayMode: true, throwOnError: false });
           return <span key={index} dangerouslySetInnerHTML={{ __html: html }} className="my-2 block text-center" />;
         } catch {
           return <span key={index}>{part}</span>;
         }
-      } else if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
-        const math = part.slice(1, -1).trim();
+      }
+
+      // Inline math ($...$ hoặc \(...\))
+      if (
+        (trimmed.startsWith('$') && trimmed.endsWith('$') && trimmed.length >= 2) ||
+        (trimmed.startsWith('\\(') && trimmed.endsWith('\\)'))
+      ) {
+        const math = trimmed.startsWith('$') ? trimmed.slice(1, -1).trim() : trimmed.slice(2, -2).trim();
         if (!math) return null;
         try {
           const html = katex.renderToString(math, { displayMode: false, throwOnError: false });
@@ -33,6 +46,17 @@ export const MathRenderer: React.FC<MathRendererProps> = ({ content, className =
           return <span key={index}>{part}</span>;
         }
       }
+
+      // Công thức hóa học độc lập \ce{...}
+      if (trimmed.startsWith('\\ce{') && trimmed.endsWith('}')) {
+        try {
+          const html = katex.renderToString(trimmed, { displayMode: false, throwOnError: false });
+          return <span key={index} dangerouslySetInnerHTML={{ __html: html }} className="inline-block mx-0.5 align-middle" />;
+        } catch {
+          return <span key={index}>{part}</span>;
+        }
+      }
+
       return <span key={index}>{part}</span>;
     });
   };
