@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginView } from './features/auth/LoginView';
 import { DashboardLayout } from './layouts/DashboardLayout';
+import { isGuestUser } from './types';
 
 // Admin Views
 import { AdminDashboardView } from './features/admin/AdminDashboardView';
@@ -26,15 +27,6 @@ import { ClassManagementView } from './features/teacher/ClassManagementView';
 import { ExamRoomView } from './features/exam-taking/ExamRoomView';
 import { ExamResultView } from './features/exam-taking/ExamResultView';
 import { PublicExamJoinView } from './features/student/PublicExamJoinView';
-
-export const isGuestUser = (user: any): boolean => {
-  if (!user) return false;
-  if (user.is_guest === true || user.is_guest === 1 || user.is_guest === '1') return true;
-  if (user.role === 'guest') return true;
-  if (typeof user.username === 'string' && user.username.startsWith('hs_')) return true;
-  if (typeof user.email === 'string' && (user.email.includes('@hochoa247.io.vn') || user.email.includes('guest'))) return true;
-  return false;
-};
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({
