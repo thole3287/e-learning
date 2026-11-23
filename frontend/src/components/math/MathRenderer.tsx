@@ -23,11 +23,12 @@ export const MathRenderer: React.FC<MathRendererProps> = ({ content, className =
         } catch {
           return <span key={index}>{part}</span>;
         }
-      } else if (part.startsWith('$') && part.endsWith('$')) {
-        const math = part.slice(1, -1);
+      } else if (part.startsWith('$') && part.endsWith('$') && part.length >= 2) {
+        const math = part.slice(1, -1).trim();
+        if (!math) return null;
         try {
           const html = katex.renderToString(math, { displayMode: false, throwOnError: false });
-          return <span key={index} dangerouslySetInnerHTML={{ __html: html }} className="inline-block mx-0.5" />;
+          return <span key={index} dangerouslySetInnerHTML={{ __html: html }} className="inline-block mx-0.5 align-middle" />;
         } catch {
           return <span key={index}>{part}</span>;
         }

@@ -91,7 +91,14 @@ class ExamGradingService
         $correctOptions = $options->where('is_correct', true);
         $correctOptionIds = $correctOptions->pluck('id')->toArray();
 
-        switch ($question->question_type) {
+        $normalizedType = strtolower(str_replace(['-', ' '], '_', trim((string) $question->question_type)));
+        if (in_array($normalizedType, ['short_answer', 'fill_in_blank', 'short', 'shortanswer', 'tra_loi_ngan', 'dien_khuyet'])) {
+            $normalizedType = 'short_answer';
+        } elseif (in_array($normalizedType, ['true_false', 'tf', 'truefalse', 'dung_sai'])) {
+            $normalizedType = 'true_false';
+        }
+
+        switch ($normalizedType) {
             case 'single_choice':
                 $selectedIds = (array) ($answer->selected_option_ids ?? []);
                 $selectedId = count($selectedIds) > 0 ? (int) $selectedIds[0] : null;

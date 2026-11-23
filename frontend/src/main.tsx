@@ -1,5 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import 'katex/dist/katex.min.css'
+import 'katex/dist/contrib/mhchem.js'
 import './index.css'
 import App from './App.tsx'
 

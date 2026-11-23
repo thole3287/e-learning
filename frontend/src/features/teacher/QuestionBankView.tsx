@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { api } from '../../services/api';
-import { Question, QuestionType } from '../../types';
+import { Question, QuestionType, normalizeQuestionType } from '../../types';
 import { MathRenderer } from '../../components/math/MathRenderer';
 import { MathToolbar } from '../../components/math/MathToolbar';
 import mammoth from 'mammoth';
@@ -1052,9 +1052,9 @@ export const QuestionBankView: React.FC = () => {
                   </span>
                   {getDifficultyBadge(q.difficulty_level)}
                   <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded uppercase tracking-wider">
-                    {q.question_type === 'fill_in_blank'
+                    {normalizeQuestionType(q.question_type) === 'short_answer'
                       ? 'Trả lời ngắn / Điền số'
-                      : q.question_type === 'true_false'
+                      : normalizeQuestionType(q.question_type) === 'true_false'
                       ? 'Đúng / Sai'
                       : 'Trắc nghiệm đơn'}
                   </span>
@@ -1151,7 +1151,7 @@ export const QuestionBankView: React.FC = () => {
                     })}
                   </div>
                 </div>
-              ) : q.question_type === 'fill_in_blank' ? (
+              ) : normalizeQuestionType(q.question_type) === 'short_answer' ? (
                 <div className="pt-2">
                   <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3.5 py-2 text-xs">
                     <span className="font-semibold text-emerald-800">Đáp án chính xác:</span>
@@ -1854,9 +1854,9 @@ export const QuestionBankView: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-slate-900">Câu {qIdx + 1}:</span>
                           <span className="text-[10px] uppercase font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                            {q.question_type === 'fill_in_blank'
+                            {normalizeQuestionType(q.question_type) === 'short_answer'
                               ? 'Trả lời ngắn / Điền số'
-                              : q.question_type === 'true_false'
+                              : normalizeQuestionType(q.question_type) === 'true_false'
                               ? 'Đúng / Sai'
                               : 'Trắc nghiệm đơn'}
                           </span>
@@ -1929,7 +1929,7 @@ export const QuestionBankView: React.FC = () => {
                             })}
                           </div>
                         </div>
-                      ) : q.question_type === 'fill_in_blank' ? (
+                      ) : normalizeQuestionType(q.question_type) === 'short_answer' ? (
                         <div className="pt-2">
                           <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3.5 py-2 text-xs">
                             <span className="font-semibold text-emerald-800">Đáp án trích xuất:</span>

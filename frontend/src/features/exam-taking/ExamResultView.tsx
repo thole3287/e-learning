@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
-import { ExamResultData } from '../../types';
+import { ExamResultData, normalizeQuestionType } from '../../types';
 import { MathRenderer } from '../../components/math/MathRenderer';
 import { Award, CheckCircle2, XCircle, AlertCircle, ArrowLeft, Home, LogOut } from 'lucide-react';
 
@@ -177,7 +177,7 @@ export const ExamResultView: React.FC = () => {
                   <MathRenderer content={q.content} />
                 </div>
 
-                {q.question_type === 'true_false' ? (
+                {normalizeQuestionType(q.question_type) === 'true_false' ? (
                   <div className="space-y-3 pt-2">
                     {/* Đường kẻ phân cách Chọn đúng hoặc sai */}
                     <div className="relative flex py-1 items-center">
@@ -262,7 +262,7 @@ export const ExamResultView: React.FC = () => {
                       })}
                     </div>
                   </div>
-                ) : q.question_type === 'fill_in_blank' || q.question_type === 'short_answer' ? (
+                ) : normalizeQuestionType(q.question_type) === 'short_answer' ? (
                   <div className="space-y-3 pt-1">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                       {/* Câu trả lời của học sinh */}

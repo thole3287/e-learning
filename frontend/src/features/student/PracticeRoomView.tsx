@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
-import { PracticeSessionData, PracticeSessionQuestion } from '../../types';
+import { PracticeSessionData, PracticeSessionQuestion, normalizeQuestionType } from '../../types';
 import { MathRenderer } from '../../components/math/MathRenderer';
 import {
   Clock,
@@ -406,7 +406,7 @@ export const PracticeRoomView: React.FC = () => {
             </div>
 
             {/* Options List */}
-            {currentQ.question_type === 'fill_in_blank' || currentQ.question_type === 'short_answer' ? (
+            {normalizeQuestionType(currentQ.question_type) === 'short_answer' ? (
               /* Fill-in / Short-answer */
               <div className="pt-2 space-y-3">
                 <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block">
@@ -425,7 +425,7 @@ export const PracticeRoomView: React.FC = () => {
               /* Multiple Choice & Single Choice */
               <div className="space-y-3 pt-2">
                 {currentQ.options.map((opt, oIdx) => {
-                  const isSingle = currentQ.question_type !== 'multiple_choice';
+                  const isSingle = normalizeQuestionType(currentQ.question_type) !== 'multiple_choice';
                   const isSelected = currentAns.selected_option_ids?.includes(opt.id);
                   const optLetter = String.fromCharCode(65 + oIdx);
 

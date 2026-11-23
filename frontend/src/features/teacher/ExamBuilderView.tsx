@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
-import { Exam, Question } from '../../types';
+import { Exam, Question, normalizeQuestionType } from '../../types';
 import { MathRenderer } from '../../components/math/MathRenderer';
 import mammoth from 'mammoth';
 import { extractDocxTextWithMath } from '../../utils/docxMathExtractor';
@@ -761,9 +761,9 @@ export const ExamBuilderView: React.FC = () => {
 
       if (res.success && res.data) {
         const rawQ = res.data.questions || [];
-        const part1 = rawQ.filter((q: any) => q.group_type === 'part1' || q.question_type === 'single_choice');
-        const part2 = rawQ.filter((q: any) => q.group_type === 'part2' || q.question_type === 'true_false');
-        const part3 = rawQ.filter((q: any) => q.group_type === 'part3' || q.question_type === 'short_answer');
+        const part1 = rawQ.filter((q: any) => q.group_type === 'part1' || normalizeQuestionType(q.question_type) === 'single_choice');
+        const part2 = rawQ.filter((q: any) => q.group_type === 'part2' || normalizeQuestionType(q.question_type) === 'true_false');
+        const part3 = rawQ.filter((q: any) => q.group_type === 'part3' || normalizeQuestionType(q.question_type) === 'short_answer');
         const part4 = rawQ.filter((q: any) => q.group_type === 'part4' || q.question_type === 'essay');
 
         const parsedResult: ParsedExamResult = {
@@ -2486,9 +2486,9 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                                   : '4. Vận dụng cao'}
                               </span>
                               <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                                {q.question_type === 'fill_in_blank'
+                                {normalizeQuestionType(q.question_type) === 'short_answer'
                                   ? 'Trả lời ngắn'
-                                  : q.question_type === 'true_false'
+                                  : normalizeQuestionType(q.question_type) === 'true_false'
                                   ? 'Đúng / Sai'
                                   : 'Trắc nghiệm'}
                               </span>
@@ -2970,9 +2970,9 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                     const l3 = questions.filter((q: any) => q.difficulty_level === 3).length;
                     const l4 = questions.filter((q: any) => q.difficulty_level === 4).length;
 
-                    const singleCount = questions.filter((q: any) => q.question_type === 'single_choice').length;
-                    const tfCount = questions.filter((q: any) => q.question_type === 'true_false').length;
-                    const fillCount = questions.filter((q: any) => q.question_type === 'fill_in_blank').length;
+                    const singleCount = questions.filter((q: any) => normalizeQuestionType(q.question_type) === 'single_choice').length;
+                    const tfCount = questions.filter((q: any) => normalizeQuestionType(q.question_type) === 'true_false').length;
+                    const fillCount = questions.filter((q: any) => normalizeQuestionType(q.question_type) === 'short_answer').length;
 
                     return (
                       <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-3 sm:p-4 text-xs space-y-2 print:hidden">
@@ -3038,9 +3038,9 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                                       : 'Vận dụng cao'}
                                   </span>
                                   <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded print:hidden uppercase">
-                                    {q.question_type === 'fill_in_blank'
+                                    {normalizeQuestionType(q.question_type) === 'short_answer'
                                       ? 'Trả lời ngắn'
-                                      : q.question_type === 'true_false'
+                                      : normalizeQuestionType(q.question_type) === 'true_false'
                                       ? 'Đúng / Sai'
                                       : 'Trắc nghiệm'}
                                   </span>
@@ -3053,7 +3053,7 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                               </div>
 
                               {/* Hiển thị các phương án / lựa chọn */}
-                              {q.question_type === 'true_false' ? (
+                              {normalizeQuestionType(q.question_type) === 'true_false' ? (
                                 <div className="space-y-3 pt-1">
                                   <div className="relative flex py-1 items-center">
                                     <div className="grow border-t border-slate-200" />
@@ -3102,7 +3102,7 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                                     })}
                                   </div>
                                 </div>
-                              ) : q.question_type === 'fill_in_blank' ? (
+                              ) : normalizeQuestionType(q.question_type) === 'short_answer' ? (
                                 <div className="pt-2">
                                   {showAnswerKey ? (
                                     <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3.5 py-2 text-xs">
@@ -3280,26 +3280,50 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs leading-relaxed focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:bg-white transition-all text-slate-800"
                 />
 
-                {/* Gợi ý chủ đề nhanh */}
-                <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="text-[11px] text-slate-400 font-medium">Gợi ý nhanh:</span>
-                  {[
-                    'Cấu tạo nguyên tử & Bảng tuần hoàn',
-                    'Liên kết hóa học & Phản ứng Oxi hóa - Khử',
-                    'Năng lượng hóa học & Tốc độ phản ứng',
-                    'Ester - Lipid & Carbohydrate',
-                    'Kim loại kiềm, kiềm thổ & Nhôm'
-                  ].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      disabled={isGeneratingAI}
-                      onClick={() => setAiTopic(preset)}
-                      className="text-[11px] bg-slate-100 hover:bg-violet-50 hover:text-violet-700 text-slate-600 px-2 py-0.5 rounded-lg border border-slate-200 transition-colors cursor-pointer"
-                    >
-                      {preset}
-                    </button>
-                  ))}
+                {/* Gợi ý chủ đề nhanh theo khối lớp */}
+                <div className="space-y-1.5 mt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1">
+                      <span>💡 Gợi ý chủ đề Hóa học {aiGradeId === '3' ? 'Lớp 12' : aiGradeId === '2' ? 'Lớp 11' : 'Lớp 10'} (bấm để điền nhanh):</span>
+                    </span>
+                    <span className="text-[10px] text-violet-600 font-medium">Chuẩn GDPT 2018</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(aiGradeId === '3' ? [
+                      { label: '🧪 Ester - Lipid', full: 'Chương 1: Ester - Lipid. Cấu tạo, đồng phân, danh pháp ester. Phản ứng xà phòng hóa, chất béo, triglyceride và chất giặt rửa tổng hợp.' },
+                      { label: '🌾 Carbohydrate', full: 'Chương 2: Carbohydrate. Cấu tạo, tính chất của Glucose, Fructose, Saccharose, Tinh bột và Cellulose. Phản ứng tráng bạc và bài toán lên men.' },
+                      { label: '🧬 Amine - Amino acid - Protein', full: 'Chương 3: Hợp chất chứa Nitrogen. Cấu tạo, tính base của amine, amino acid lưỡng tính, liên kết peptide và protein.' },
+                      { label: '🧵 Polymer & Vật liệu', full: 'Chương 4: Polymer và vật liệu polymer. Phản ứng trùng hợp, trùng ngưng, chất dẻo, cao su và tơ sợi tổng hợp.' },
+                      { label: '⚡ Pin điện & Điện phân', full: 'Chương 5: Pin điện và Điện phân. Thế điện cực chuẩn, pin Galvani, định luật Faraday và bài toán điện phân dung dịch, sự ăn mòn kim loại.' },
+                      { label: '🔩 Kim loại & Phức chất', full: 'Chương 6 & 7: Đại cương kim loại, kim loại chuyển tiếp dãy thứ nhất và hóa học phức chất GDPT 2018.' },
+                      { label: '📝 Đề Giữa kì 1 Hóa 12', full: 'Kiểm tra Giữa kì 1 Hóa học 12 chuẩn GDPT 2018: gồm Chương 1 Ester - Lipid và Chương 2 Carbohydrate. Có bài tập tính toán este và glucozơ.' },
+                      { label: '🎯 Đề Thi Tốt Nghiệp THPT Hóa 12', full: 'Đề thi thử Tốt nghiệp THPT môn Hóa học lớp 12 chuẩn ma trận GDPT 2018. Phủ toàn diện: Ester, Carbohydrate, Amine, Polymer, Điện phân, Kim loại và Phức chất.' },
+                    ] : aiGradeId === '2' ? [
+                      { label: '⚖️ Cân bằng hóa học & pH', full: 'Chương 1: Cân bằng hóa học. Chuyển dịch cân bằng Le Chatelier, thuyết Brønsted - Lowry về acid - base và tính pH dung dịch.' },
+                      { label: '🧪 Nitrogen & Sulfur', full: 'Chương 2: Nitrogen và Sulfur. Đơn chất nitrogen, amoniac, muối amoni, acid nitric, sulfur dioxide và acid sulfuric.' },
+                      { label: '🔬 Đại cương Hóa hữu cơ', full: 'Chương 3: Đại cương hóa học hữu cơ. Công thức phân tử, công thức cấu tạo, đồng phân và phương pháp phổ hồng ngoại (IR).' },
+                      { label: '⛽ Hydrocarbon', full: 'Chương 4: Hydrocarbon. Tính chất hóa học của Alkane, Alkene, Alkyne và Arene (benzene).' },
+                      { label: '🍷 Alcohol & Phenol', full: 'Chương 5: Dẫn xuất halogen, alcohol và phenol. Tính chất hóa học, liên kết hydro và phản ứng thế.' },
+                      { label: '🍋 Carbonyl & Carboxylic Acid', full: 'Chương 6: Hợp chất carbonyl (aldehyde, ketone) và Carboxylic acid.' },
+                    ] : [
+                      { label: '⚛️ Cấu tạo nguyên tử & Bảng tuần hoàn', full: 'Chương 1 & 2: Cấu tạo nguyên tử, đồng vị hạt nhân, cấu hình electron và quy luật biến đổi trong bảng tuần hoàn.' },
+                      { label: '🔗 Liên kết hóa học', full: 'Chương 3: Liên kết hóa học. Liên kết ion, liên kết cộng hóa trị, liên kết hydrogen và tương tác van der Waals.' },
+                      { label: '🔄 Phản ứng Oxi hóa - Khử', full: 'Chương 4: Phản ứng Oxi hóa - Khử. Xác định số oxi hóa, lập phương trình phản ứng theo phương pháp thăng bằng electron.' },
+                      { label: '🔥 Năng lượng hóa học (Enthalpy)', full: 'Chương 5: Năng lượng hóa học. Biến thiên enthalpy chuẩn của phản ứng, enthalpy tạo thành và tính nhiệt phản ứng.' },
+                      { label: '⏱️ Tốc độ phản ứng', full: 'Chương 6: Tốc độ phản ứng hóa học. Định luật tác dụng khối lượng, hằng số tốc độ và các yếu tố ảnh hưởng.' },
+                      { label: '🧂 Nhóm Halogen (VIIA)', full: 'Chương 7: Nguyên tố nhóm Halogen (VIIA). Tính chất biến đổi của F, Cl, Br, I và các hợp chất hydrohalic acid.' },
+                    ]).map((preset) => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        disabled={isGeneratingAI}
+                        onClick={() => setAiTopic(preset.full)}
+                        className="text-[11px] bg-white hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs transition-all cursor-pointer font-medium"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

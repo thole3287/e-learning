@@ -24,6 +24,26 @@ export const isGuestUser = (user: any): boolean => {
 
 export type QuestionType = 'single_choice' | 'multiple_choice' | 'true_false' | 'fill_in_blank' | 'short_answer';
 
+export const normalizeQuestionType = (
+  type?: string
+): 'single_choice' | 'multiple_choice' | 'true_false' | 'short_answer' => {
+  if (!type) return 'single_choice';
+  const clean = type.toLowerCase().trim().replace(/[\s\-]/g, '_');
+  if (clean === 'true_false' || clean === 'tf' || clean === 'dung_sai') return 'true_false';
+  if (
+    clean === 'short_answer' ||
+    clean === 'fill_in_blank' ||
+    clean === 'fill_in_the_blank' ||
+    clean === 'short' ||
+    clean === 'tra_loi_ngan' ||
+    clean === 'dien_khuyet'
+  ) {
+    return 'short_answer';
+  }
+  if (clean === 'multiple_choice') return 'multiple_choice';
+  return 'single_choice';
+};
+
 export interface QuestionOption {
   id: number;
   content: string;

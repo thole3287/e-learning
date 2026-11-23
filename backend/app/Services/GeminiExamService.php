@@ -98,7 +98,21 @@ class GeminiExamService
             $rawQuestions = $examData['questions'];
 
             foreach ($rawQuestions as $index => $q) {
-                $type = $q['question_type'] ?? 'single_choice';
+                $rawType = strtolower(str_replace(['-', ' '], '_', trim((string) ($q['question_type'] ?? ''))));
+                if (in_array($rawType, ['single_choice', 'single', 'multiple_choice_single', 'trac_nghiem'])) {
+                    $type = 'single_choice';
+                } elseif (in_array($rawType, ['true_false', 'tf', 'truefalse', 'dung_sai'])) {
+                    $type = 'true_false';
+                } elseif (in_array($rawType, ['short_answer', 'fill_in_blank', 'short', 'shortanswer', 'tra_loi_ngan', 'dien_khuyet'])) {
+                    $type = 'short_answer';
+                } else {
+                    // Fallback theo group_type
+                    $group = strtolower(trim((string) ($q['group_type'] ?? '')));
+                    if ($group === 'part2') $type = 'true_false';
+                    elseif ($group === 'part3') $type = 'short_answer';
+                    else $type = 'single_choice';
+                }
+
                 $groupType = $q['group_type'] ?? ($type === 'single_choice' ? 'part1' : ($type === 'true_false' ? 'part2' : 'part3'));
 
                 // Chuẩn hóa options
@@ -160,26 +174,15 @@ class GeminiExamService
             $text = trim($text);
         }
 
-        // Thử decode trước nếu đã chuẩn
-        $decoded = json_decode($text, true);
-        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            return $text;
-        }
+        // 1. Tự động escape các lệnh LaTeX từ 2 ký tự trở lên (\frac, \text, \to, \rightarrow, \ce, \sqrt, \alpha, \pm,...)
+        // Bắt mọi lệnh LaTeX có 1 dấu \ để chuyển thành 2 dấu \\
+        $text = preg_replace('/(?<!\\\\)\\\\([a-zA-Z]{2,25}|[0-9]+|\{|\}|\[|\]|\%|\_)/', '\\\\\\\\$1', $text);
 
-        // Tự động escape các lệnh LaTeX thông dụng bị thiếu escape
-        $latexCommands = [
-            'frac', 'times', 'rightarrow', 'Rightarrow', 'sqrt', 'cdot', 'overline',
-            'alpha', 'beta', 'gamma', 'delta', 'Delta', 'pi', 'mu', 'lambda', 'left', 'right',
-            'begin', 'end', 'text', 'rm', 'mathbf', 'mathit', 'sum', 'int', 'infty',
-            'approx', 'le', 'ge', 'neq', 'pm', 'circ', 'degree', 'bar', 'nu', 'rho'
-        ];
+        // 2. Escape các ký hiệu 1 ký tự trong toán/hóa học (, : ; !)
+        $text = preg_replace('/(?<!\\\\)\\\\([,:;!])/', '\\\\\\\\$1', $text);
 
-        foreach ($latexCommands as $cmd) {
-            $text = preg_replace('/(?<!\\\\)\\\\' . $cmd . '\b/', '\\\\\\\\' . $cmd, $text);
-        }
-
-        // Escape các dấu \ còn lại nếu không theo sau bởi ký tự escape JSON chuẩn
-        $text = preg_replace('/\\\\(?!["\\\\\/bfnrt]|u[0-9a-fA-F]{4})/', '\\\\\\\\', $text);
+        // 3. Escape các backslash đơn đứng trước các ký tự không phải escape JSON chuẩn (n, r, t, b, f, u, ", \)
+        $text = preg_replace('/(?<!\\\\)\\\\([acdeg-hijklmopqsv-wxyzAC-Z])/', '\\\\\\\\$1', $text);
 
         return $text;
     }
@@ -209,25 +212,30 @@ THÔNG TIN ĐỀ THI:
 CẤU TRÚC ĐỀ THI GDPT 2018:
 1. PHẦN I (Trắc nghiệm nhiều lựa chọn - single_choice): Tạo đúng {$numPart1} câu hỏi.
    - Mỗi câu có 4 phương án lựa chọn A, B, C, D (đúng 1 phương án đúng).
+   - "question_type": "single_choice"
    - "group_type": "part1"
+   - Tuyệt đối không để trống phương án hay nội dung câu hỏi!
 2. PHẦN II (Trắc nghiệm Đúng / Sai - true_false): Tạo đúng {$numPart2} câu hỏi.
    - Mỗi câu gồm 1 ngữ cảnh/đề bài và 4 ý a), b), c), d). Thí sinh chọn Đúng hoặc Sai cho từng ý.
+   - "question_type": "true_false"
    - "group_type": "part2"
    - Trong "options": phải có đúng 4 phần tử tương ứng với 4 ý a, b, c, d (ghi rõ is_correct: true nếu ý đó ĐÚNG, false nếu SAI).
 3. PHẦN III (Câu hỏi Trả lời ngắn - short_answer): Tạo đúng {$numPart3} câu hỏi.
    - Câu hỏi định lượng hoặc định tính đòi hỏi học sinh tự tính toán/suy luận ra 1 giá trị số hoặc 1 từ/cụm từ ngắn gọn (ví dụ: '15', '3.5', 'chu kì 3').
+   - "question_type": "short_answer"
    - "group_type": "part3"
    - Trong "options": chỉ gồm 1 phần tử chứa đáp án chuẩn: [{"content": "<đáp án số hoặc chữ>", "is_correct": true}]
 
 QUY TẮC CÔNG THỨC TOÁN & HÓA HỌC (BẮT BUỘC):
 - Tất cả công thức toán, phương trình hóa học, ký hiệu nguyên tử, số khối, electron, số mũ, chỉ số dưới PHẢI ĐẶT TRONG DẤU ĐÔ LA $...$, ví dụ:
   + Cấu hình electron: \$1s^2 2s^2 2p^6\$
-  + Ký hiệu đồng vị hạt nhân: \${^{16}_8O}\$ hoặc \${^{35}_{17}Cl}\$
+  + Ký hiệu đồng vị hạt nhân: \${^{16}_{8}O}\$ hoặc \$\\ce{^{16}_{8}O}\$ hoặc \${^{35}_{17}Cl}\$
+  + Phương trình hóa học: \$\\ce{H2SO4 + 2NaOH -> Na2SO4 + 2H2O}\$
   + Phân số: \$\\frac{a}{b}\$
   + Căn thức: \$\\sqrt{x}\$
   + Ký hiệu nguyên tố, phân lớp: \$X\$, \$P, S, Cl\$, phân lớp \$p\$
-- Không để công thức trần bên ngoài mà không có dấu $.
-- QUY TẮC JSON QUAN TRỌNG: Mọi dấu gạch chéo ngược trong công thức LaTeX (như \\frac, \\times, \\Rightarrow, \\sqrt) PHẢI ĐƯỢC ESCAPE BẰNG HAI DẤU GẠCH CHÉO NGƯỢC (\\\\frac, \\\\times, \\\\Rightarrow, \\\\sqrt) để đảm bảo chuỗi JSON hoàn toàn hợp lệ.
+- TUYỆT ĐỐI KHÔNG để trống công thức hoặc phương án (không bao giờ trả về '.' đơn thuần trong phương án A, B, C, D; luôn ghi rõ nội dung phương án, ví dụ: 'A. \${^{16}_{8}X}\$ và \${^{17}_{8}Y}\$').
+- QUY TẮC JSON QUAN TRỌNG: Mọi dấu gạch chéo ngược trong công thức LaTeX (như \\frac, \\times, \\Rightarrow, \\sqrt, \\ce, \\text) PHẢI ĐƯỢC ESCAPE BẰNG HAI DẤU GẠCH CHÉO NGƯỢC (\\\\frac, \\\\times, \\\\Rightarrow, \\\\sqrt, \\\\ce, \\\\text) để đảm bảo chuỗi JSON hoàn toàn hợp lệ.
 
 YÊU CẦU ĐỊNH DẠNG JSON ĐẦU RA (Strict JSON Schema):
 Trả về DUY NHẤT một đối tượng JSON hợp lệ (không kèm giải thích bên ngoài hay markdown backticks):

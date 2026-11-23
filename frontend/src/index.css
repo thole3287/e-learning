@@ -18,6 +18,25 @@
 /* Custom Math & Examination styles */
 .katex {
   font-size: 1.1em !important;
+  color: inherit !important;
+}
+
+.katex * {
+  color: inherit !important;
+}
+
+.katex-html {
+  color: inherit !important;
+}
+
+/* Đảm bảo công thức toán/hóa học luôn rõ nét trên theme tối và tiện ích Dark Reader */
+html[data-theme='dark'] .katex,
+.dark .katex,
+[data-darkreader-scheme='dark'] .katex,
+[data-theme='dark'] .katex *,
+.dark .katex *,
+[data-darkreader-scheme='dark'] .katex * {
+  color: #f1f5f9 !important;
 }
 
 .math-content {

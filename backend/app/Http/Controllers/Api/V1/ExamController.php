@@ -530,7 +530,16 @@ class ExamController extends Controller
             $globalChapterId = $validated['chapter_id'] ?? null;
 
             foreach ($validated['questions'] as $index => $qItem) {
-                $questionType = $qItem['question_type'] ?? 'single_choice';
+                $rawType = strtolower(str_replace(['-', ' '], '_', trim((string) ($qItem['question_type'] ?? 'single_choice'))));
+                if (in_array($rawType, ['short_answer', 'fill_in_blank', 'short', 'shortanswer', 'tra_loi_ngan', 'dien_khuyet'])) {
+                    $questionType = 'short_answer';
+                } elseif (in_array($rawType, ['true_false', 'tf', 'truefalse', 'dung_sai'])) {
+                    $questionType = 'true_false';
+                } elseif ($rawType === 'multiple_choice') {
+                    $questionType = 'multiple_choice';
+                } else {
+                    $questionType = 'single_choice';
+                }
                 $difficulty = $qItem['difficulty_level'] ?? 1;
                 $points = $qItem['points'] ?? $defaultPointsPerQ;
                 $chapterId = $qItem['chapter_id'] ?? $globalChapterId;
