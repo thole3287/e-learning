@@ -11,6 +11,7 @@ use App\Models\QuestionOption;
 use App\Models\User;
 use App\Services\ExamAttemptService;
 use App\Services\ExamMatrixService;
+use App\Services\GeminiExamService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -820,6 +821,39 @@ class ExamController extends Controller
                 'room_data' => $payload,
             ],
         ]);
+    }
+
+    /**
+     * Sinh đề thi trắc nghiệm bằng Google Gemini AI (Chuẩn GDPT 2018)
+     */
+    public function generateWithAI(Request $request, GeminiExamService $geminiService): JsonResponse
+    {
+        $validated = $request->validate([
+            'subject_name' => 'nullable|string|max:100',
+            'grade_name' => 'nullable|string|max:50',
+            'topic' => 'required|string|min:3|max:500',
+            'duration_minutes' => 'nullable|integer|min:5|max:180',
+            'num_part1' => 'nullable|integer|min:0|max:50',
+            'num_part2' => 'nullable|integer|min:0|max:20',
+            'num_part3' => 'nullable|integer|min:0|max:20',
+            'custom_requirements' => 'nullable|string|max:1000',
+            'api_key' => 'nullable|string|max:200',
+        ]);
+
+        try {
+            $examData = $geminiService->generateExam($validated);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Tạo đề thi bằng AI thành công!',
+                'data' => $examData,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function getShuffledOffline(Request $request, Exam $exam): JsonResponse

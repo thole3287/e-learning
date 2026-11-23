@@ -70,6 +70,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/questions/{question}/duplicate', [QuestionController::class, 'duplicate']);
 
         // Exam Management
+        Route::post('/exams/generate-ai', [ExamController::class, 'generateWithAI']);
         Route::post('/exams/quick-create', [ExamController::class, 'quickCreate']);
         Route::post('/exams/public/{code}/join', [ExamController::class, 'joinPublicExam']);
         Route::apiResource('exams', ExamController::class);

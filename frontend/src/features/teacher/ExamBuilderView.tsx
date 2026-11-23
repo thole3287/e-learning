@@ -99,6 +99,21 @@ export const ExamBuilderView: React.FC = () => {
   const [createdExamSuccess, setCreatedExamSuccess] = useState<any>(null);
   const [copiedExamId, setCopiedExamId] = useState<number | null>(null);
 
+  // AI Exam Generator Modal State (Google Gemini)
+  const [showAIExamModal, setShowAIExamModal] = useState(false);
+  const [aiSubjectId, setAiSubjectId] = useState(3);
+  const [aiGradeId, setAiGradeId] = useState('1');
+  const [aiTopic, setAiTopic] = useState('');
+  const [aiNumPart1, setAiNumPart1] = useState(18);
+  const [aiNumPart2, setAiNumPart2] = useState(4);
+  const [aiNumPart3, setAiNumPart3] = useState(6);
+  const [aiDuration, setAiDuration] = useState(50);
+  const [aiCustomPrompt, setAiCustomPrompt] = useState('');
+  const [aiApiKey, setAiApiKey] = useState('');
+  const [useCustomApiKey, setUseCustomApiKey] = useState(false);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiLoadingMessage, setAiLoadingMessage] = useState('');
+
   const handleCopyExamLink = (exam: { code: string; id: number }) => {
     const origin = window.location.origin;
     const link = `${origin}/exam/${exam.code}`;
@@ -705,6 +720,90 @@ export const ExamBuilderView: React.FC = () => {
     });
   };
 
+  // Submit tạo đề thi tự động bằng Google Gemini AI (Chuẩn GDPT 2018)
+  const handleGenerateAIExam = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiTopic.trim()) {
+      alert('Vui lòng nhập chủ đề hoặc bài học cần tạo đề thi!');
+      return;
+    }
+
+    setIsGeneratingAI(true);
+    setAiLoadingMessage('Đang kết nối Google Gemini API...');
+
+    const subObj = subjects.find((s) => s.id === Number(aiSubjectId));
+    const gradeMap: Record<string, string> = { '1': 'Khối 10', '2': 'Khối 11', '3': 'Khối 12' };
+
+    const timer1 = setTimeout(() => {
+      setAiLoadingMessage('Đang biên soạn câu hỏi chuẩn GDPT 2018 (Phần I, II, III)...');
+    }, 2500);
+
+    const timer2 = setTimeout(() => {
+      setAiLoadingMessage('Đang chuẩn hóa công thức KaTeX và kiểm tra đáp án chi tiết...');
+    }, 6000);
+
+    try {
+      const res: any = await api.post('/exams/generate-ai', {
+        subject_name: subObj?.name || 'Hóa học',
+        grade_name: gradeMap[aiGradeId] || 'Khối 10',
+        topic: aiTopic.trim(),
+        num_part1: Number(aiNumPart1) || 0,
+        num_part2: Number(aiNumPart2) || 0,
+        num_part3: Number(aiNumPart3) || 0,
+        duration_minutes: Number(aiDuration) || 50,
+        custom_requirements: aiCustomPrompt.trim() || undefined,
+        api_key: useCustomApiKey && aiApiKey.trim() ? aiApiKey.trim() : undefined,
+      });
+
+      if (res.success && res.data) {
+        const rawQ = res.data.questions || [];
+        const part1 = rawQ.filter((q: any) => q.group_type === 'part1' || q.question_type === 'single_choice');
+        const part2 = rawQ.filter((q: any) => q.group_type === 'part2' || q.question_type === 'true_false');
+        const part3 = rawQ.filter((q: any) => q.group_type === 'part3' || q.question_type === 'short_answer');
+        const part4 = rawQ.filter((q: any) => q.group_type === 'part4' || q.question_type === 'essay');
+
+        const parsedResult: ParsedExamResult = {
+          title: res.data.title || `Đề kiểm tra ${subObj?.name || 'Hóa học'} - ${gradeMap[aiGradeId]}`,
+          questions: rawQ,
+          groups: {
+            part1,
+            part2,
+            part3,
+            part4,
+          },
+          totalCount: rawQ.length,
+        };
+
+        setParsedExam(parsedResult);
+        setQuickExamTitle(parsedResult.title);
+        setQuickSubjectId(Number(aiSubjectId));
+        setQuickGradeId(aiGradeId);
+        setQuickDuration(Number(aiDuration) || 50);
+
+        setSubExamPicks({
+          part1Count: Math.min(part1.length, 18),
+          part1Points: 4.5,
+          part2Count: Math.min(part2.length, 4),
+          part2Points: 4.0,
+          part3Count: Math.min(part3.length, 6),
+          part3Points: 1.5,
+        });
+
+        setShowAIExamModal(false);
+        setShowQuickWordModal(true);
+      } else {
+        alert(res.message || 'Không thể tạo đề thi bằng AI. Vui lòng thử lại!');
+      }
+    } catch (err: any) {
+      alert(err?.response?.data?.message || err?.message || 'Có lỗi xảy ra khi gọi Google Gemini.');
+    } finally {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      setIsGeneratingAI(false);
+      setAiLoadingMessage('');
+    }
+  };
+
   // Submit tạo đề thi nhanh từ file Word (kèm đề con & tự lưu ngân hàng)
   const handleQuickWordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -997,6 +1096,15 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => {
+              setShowAIExamModal(true);
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-violet-600/25 transition-all self-start sm:self-auto shrink-0 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+            <span>✨ Tạo Đề Thi Bằng AI (Gemini)</span>
+          </button>
           <button
             onClick={() => {
               setShowQuickWordModal(true);
@@ -3079,6 +3187,283 @@ Chỉ trả về chuỗi JSON thuần túy trong cặp ngoặc vuông [], không
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL TẠO ĐỀ THI TỰ ĐỘNG BẰNG AI (GOOGLE GEMINI) ================= */}
+      {showAIExamModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-5 sm:p-7 space-y-5 animate-in fade-in zoom-in-95 duration-150 border border-slate-100">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-violet-500/25 shrink-0">
+                  <Sparkles className="w-6 h-6 text-amber-300 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base sm:text-lg flex items-center gap-2">
+                    <span>Tạo Đề Thi Bằng AI (Google Gemini)</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-800 uppercase tracking-wide">
+                      GDPT 2018
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Tự động tạo trọn bộ đề thi theo chuẩn ma trận tốt nghiệp mới: Phần I, Phần II, Phần III kèm công thức LaTeX & giải chi tiết.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAIExamModal(false)}
+                disabled={isGeneratingAI}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleGenerateAIExam} className="space-y-4 text-xs">
+              {/* Môn & Khối */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Môn học <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={aiSubjectId}
+                    onChange={(e) => setAiSubjectId(Number(e.target.value))}
+                    disabled={isGeneratingAI}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                  >
+                    {subjects.map((sub) => (
+                      <option key={sub.id} value={sub.id}>
+                        {sub.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Khối lớp <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={aiGradeId}
+                    onChange={(e) => setAiGradeId(e.target.value)}
+                    disabled={isGeneratingAI}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-medium focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                  >
+                    <option value="1">Khối 10</option>
+                    <option value="2">Khối 11</option>
+                    <option value="3">Khối 12</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Chủ đề kiểm tra */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Chủ đề / Bài học kiểm tra <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={aiTopic}
+                  onChange={(e) => setAiTopic(e.target.value)}
+                  disabled={isGeneratingAI}
+                  placeholder="Ví dụ: Chương 1: Cấu tạo nguyên tử, Đồng vị hạt nhân, Bảng tuần hoàn các nguyên tố hóa học, Cấu hình electron và bài toán tính nguyên tử khối trung bình..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs leading-relaxed focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500 focus:bg-white transition-all text-slate-800"
+                />
+
+                {/* Gợi ý chủ đề nhanh */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                  <span className="text-[11px] text-slate-400 font-medium">Gợi ý nhanh:</span>
+                  {[
+                    'Cấu tạo nguyên tử & Bảng tuần hoàn',
+                    'Liên kết hóa học & Phản ứng Oxi hóa - Khử',
+                    'Năng lượng hóa học & Tốc độ phản ứng',
+                    'Ester - Lipid & Carbohydrate',
+                    'Kim loại kiềm, kiềm thổ & Nhôm'
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      disabled={isGeneratingAI}
+                      onClick={() => setAiTopic(preset)}
+                      className="text-[11px] bg-slate-100 hover:bg-violet-50 hover:text-violet-700 text-slate-600 px-2 py-0.5 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cấu trúc đề thi GDPT 2018 */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 sm:p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Cấu trúc đề GDPT 2018 (3 Phần chuẩn)</span>
+                  </span>
+                  <span className="text-[11px] text-violet-700 font-bold bg-violet-50 px-2 py-0.5 rounded-full border border-violet-200">
+                    Tổng: {Number(aiNumPart1) + Number(aiNumPart2) + Number(aiNumPart3)} câu = 10.0 đ
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-center">
+                  <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-1 shadow-2xs">
+                    <span className="text-[11px] text-slate-500 font-bold block">Phần I (Trắc nghiệm)</span>
+                    <div className="flex items-center justify-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="40"
+                        value={aiNumPart1}
+                        onChange={(e) => setAiNumPart1(Number(e.target.value))}
+                        disabled={isGeneratingAI}
+                        className="w-16 bg-slate-50 border border-slate-300 rounded-lg py-1 px-2 text-center text-xs font-bold text-slate-800"
+                      />
+                      <span className="text-slate-400 text-[11px]">câu</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block">4 lựa chọn (A,B,C,D)</span>
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-1 shadow-2xs">
+                    <span className="text-[11px] text-slate-500 font-bold block">Phần II (Đúng / Sai)</span>
+                    <div className="flex items-center justify-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={aiNumPart2}
+                        onChange={(e) => setAiNumPart2(Number(e.target.value))}
+                        disabled={isGeneratingAI}
+                        className="w-16 bg-slate-50 border border-slate-300 rounded-lg py-1 px-2 text-center text-xs font-bold text-slate-800"
+                      />
+                      <span className="text-slate-400 text-[11px]">câu</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block">Mỗi câu 4 ý a,b,c,d</span>
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-xl p-2.5 space-y-1 shadow-2xs">
+                    <span className="text-[11px] text-slate-500 font-bold block">Phần III (Trả lời ngắn)</span>
+                    <div className="flex items-center justify-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        value={aiNumPart3}
+                        onChange={(e) => setAiNumPart3(Number(e.target.value))}
+                        disabled={isGeneratingAI}
+                        className="w-16 bg-slate-50 border border-slate-300 rounded-lg py-1 px-2 text-center text-xs font-bold text-slate-800"
+                      />
+                      <span className="text-slate-400 text-[11px]">câu</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block">Học sinh tự điền đáp án</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Thời gian làm bài & Yêu cầu bổ sung */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Thời gian làm bài
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      min="5"
+                      max="180"
+                      value={aiDuration}
+                      onChange={(e) => setAiDuration(Number(e.target.value))}
+                      disabled={isGeneratingAI}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                    />
+                    <span className="text-slate-400 font-medium">phút</span>
+                  </div>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Yêu cầu bổ sung cho AI (Tùy chọn)
+                  </label>
+                  <input
+                    type="text"
+                    value={aiCustomPrompt}
+                    onChange={(e) => setAiCustomPrompt(e.target.value)}
+                    disabled={isGeneratingAI}
+                    placeholder="VD: Nhiều bài tập tính toán, độ khó mức độ Khá - Giỏi..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-violet-500/20 focus:border-violet-500"
+                  />
+                </div>
+              </div>
+
+              {/* Trạng thái API Key Gemini */}
+              <div className="p-3 bg-violet-50/70 border border-violet-200/80 rounded-2xl flex items-center justify-between text-[11px]">
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="font-semibold text-violet-950">
+                    Google Gemini 2.5 Flash • Đã kết nối API Key hệ thống (HOCHOA)
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUseCustomApiKey(!useCustomApiKey)}
+                  className="text-violet-700 hover:text-violet-900 font-semibold underline underline-offset-2 cursor-pointer"
+                >
+                  {useCustomApiKey ? 'Dùng Key mặc định' : 'Đổi API Key riêng'}
+                </button>
+              </div>
+
+              {useCustomApiKey && (
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-700">
+                    Nhập Gemini API Key cá nhân của bạn:
+                  </label>
+                  <input
+                    type="password"
+                    value={aiApiKey}
+                    onChange={(e) => setAiApiKey(e.target.value)}
+                    placeholder="Dán Gemini API Key của bạn vào đây (nếu có)"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 font-mono text-xs"
+                  />
+                </div>
+              )}
+
+              {/* Trạng thái đang tải */}
+              {isGeneratingAI && (
+                <div className="p-4 bg-gradient-to-r from-violet-50 via-indigo-50 to-purple-50 border border-violet-200 rounded-2xl text-center space-y-2 animate-in fade-in">
+                  <div className="w-8 h-8 border-3 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="font-bold text-violet-900 text-xs">{aiLoadingMessage || 'Đang tạo đề thi...'}</p>
+                  <p className="text-[11px] text-slate-500">
+                    Google Gemini đang tự động biên soạn câu hỏi, giải toán/hóa và định dạng KaTeX... Quá trình này mất khoảng 5-10 giây.
+                  </p>
+                </div>
+              )}
+
+              {/* Nút hành động */}
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={isGeneratingAI}
+                  onClick={() => setShowAIExamModal(false)}
+                  className="px-4 py-2.5 border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  Hủy Bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isGeneratingAI}
+                  className="px-6 py-2.5 bg-gradient-to-r from-violet-600 via-indigo-600 to-purple-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-violet-600/30 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>{isGeneratingAI ? 'Đang Khởi Tạo Đề Thi...' : '🚀 Bắt Đầu Tạo Đề Thi Với AI'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
