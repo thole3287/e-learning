@@ -67,7 +67,7 @@ class GeminiExamService
         ];
 
         try {
-            $response = Http::timeout(90)
+            $response = Http::timeout(150)
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->post($endpoint, $payload);
 
@@ -162,7 +162,7 @@ class GeminiExamService
     }
 
     /**
-     * Làm sạch chuỗi JSON và tự động escape các ký tự LaTeX
+     * Làm sạch chuỗi JSON và tự động escape các ký tự LaTeX & control characters
      */
     protected function cleanJsonString(string $rawText): string
     {
@@ -174,19 +174,70 @@ class GeminiExamService
             $text = trim($text);
         }
 
-        // 1. Tự động escape các lệnh LaTeX từ 2 ký tự trở lên (\frac, \text, \to, \rightarrow, \ce, \sqrt, \alpha, \beta, \Delta, \pm,...)
+        // Bước 1: Chuẩn hóa và làm sạch các ký tự điều khiển (raw newline, tab) xuất hiện bên trong các chuỗi string JSON
+        $text = $this->sanitizeControlCharsInJsonStrings($text);
+
+        // Bước 2: Tự động escape các lệnh LaTeX từ 2 ký tự trở lên (\frac, \text, \to, \rightarrow, \ce, \sqrt, \alpha, \beta, \Delta, \pm,...)
         $text = preg_replace('/(?<!\\\\)\\\\([a-zA-Z]{2,25})/', '\\\\\\\\$1', $text);
 
-        // 2. Escape các ký hiệu toán/hóa học, dấu ngoặc và ký tự đặc biệt LaTeX: \( \) \[ \] \{ \} \% \_ \$ \# \& \: \, \; \! \+ \- \* \= \< \> \| \~ \^ \. \/
+        // Bước 3: Escape các ký hiệu toán/hóa học, dấu ngoặc và ký tự đặc biệt LaTeX: \( \) \[ \] \{ \} \% \_ \$ \# \& \: \, \; \! \+ \- \* \= \< \> \| \~ \^ \. \/
         $text = preg_replace('/(?<!\\\\)\\\\([()[\]{}%_$#&:,;!+\-*=<>|~^.\/])/', '\\\\\\\\$1', $text);
 
-        // 3. Escape các backslash đơn đứng trước chữ cái đơn không phải escape JSON chuẩn (b, f, n, r, t, u, ", \)
+        // Bước 4: Escape các backslash đơn đứng trước chữ cái đơn không phải escape JSON chuẩn (b, f, n, r, t, u, ", \)
         $text = preg_replace('/(?<!\\\\)\\\\([acdeg-hijklmopqsv-wxyzAC-Z])/', '\\\\\\\\$1', $text);
 
-        // 4. Escape các backslash đứng cô lập theo sau bởi khoảng trắng
+        // Bước 5: Escape các backslash đứng cô lập theo sau bởi khoảng trắng
         $text = preg_replace('/(?<!\\\\)\\\\(\s+)/', '\\\\\\\\$1', $text);
 
         return $text;
+    }
+
+    /**
+     * Chuẩn hóa ký tự điều khiển bên trong các giá trị chuỗi của JSON
+     */
+    protected function sanitizeControlCharsInJsonStrings(string $json): string
+    {
+        $result = '';
+        $len = strlen($json);
+        $inString = false;
+        $escaped = false;
+
+        for ($i = 0; $i < $len; $i++) {
+            $c = $json[$i];
+
+            if ($c === '"' && !$escaped) {
+                $inString = !$inString;
+                $result .= $c;
+                continue;
+            }
+
+            if ($inString) {
+                if ($c === "\n") {
+                    if ($escaped) {
+                        $result .= 'n';
+                        $escaped = false;
+                    } else {
+                        $result .= '\n';
+                    }
+                    continue;
+                } elseif ($c === "\r") {
+                    continue;
+                } elseif ($c === "\t") {
+                    $result .= ' ';
+                    continue;
+                }
+            }
+
+            $result .= $c;
+
+            if ($c === '\\' && !$escaped) {
+                $escaped = true;
+            } else {
+                $escaped = false;
+            }
+        }
+
+        return $result;
     }
 
     /**
@@ -237,7 +288,10 @@ QUY TẮC CÔNG THỨC TOÁN & HÓA HỌC (BẮT BUỘC):
   + Căn thức: \$\\sqrt{x}\$
   + Ký hiệu nguyên tố, phân lớp: \$X\$, \$P, S, Cl\$, phân lớp \$p\$
 - TUYỆT ĐỐI KHÔNG để trống công thức hoặc phương án (không bao giờ trả về '.' đơn thuần trong phương án A, B, C, D; luôn ghi rõ nội dung phương án, ví dụ: 'A. \${^{16}_{8}X}\$ và \${^{17}_{8}Y}\$').
-- QUY TẮC JSON QUAN TRỌNG: Mọi dấu gạch chéo ngược trong công thức LaTeX (như \\frac, \\times, \\Rightarrow, \\sqrt, \\ce, \\text) PHẢI ĐƯỢC ESCAPE BẰNG HAI DẤU GẠCH CHÉO NGƯỢC (\\\\frac, \\\\times, \\\\Rightarrow, \\\\sqrt, \\\\ce, \\\\text) để đảm bảo chuỗi JSON hoàn toàn hợp lệ.
+- QUY TẮC JSON QUAN TRỌNG:
+  + Mọi dấu gạch chéo ngược trong công thức LaTeX (như \\frac, \\times, \\Rightarrow, \\sqrt, \\ce, \\text) PHẢI ĐƯỢC ESCAPE BẰNG HAI DẤU GẠCH CHÉO NGƯỢC (\\\\frac, \\\\times, \\\\Rightarrow, \\\\sqrt, \\\\ce, \\\\text) để chuỗi JSON hoàn toàn hợp lệ.
+  + TUYỆT ĐỐI KHÔNG ấn Enter xuống dòng thực sự bên trong các chuỗi giá trị JSON ("content", "explanation", "options"). Nếu muốn xuống dòng trong lời giải, hãy dùng ký tự \\\\n.
+  + Phần lời giải (explanation) viết ngắn gọn, súc tích (1-3 dòng), tập trung trực diện vào đáp án để tối ưu tốc độ phản hồi.
 
 YÊU CẦU ĐỊNH DẠNG JSON ĐẦU RA (Strict JSON Schema):
 Trả về DUY NHẤT một đối tượng JSON hợp lệ (không kèm giải thích bên ngoài hay markdown backticks):
