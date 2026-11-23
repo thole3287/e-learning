@@ -332,7 +332,11 @@ export const ExamBuilderView: React.FC = () => {
       if (subjectRes.success) {
         setSubjects(subjectRes.data);
         if (subjectRes.data.length > 0) {
-          setCreateForm((prev) => ({ ...prev, subject_id: subjectRes.data[0].id }));
+          const chemSub = subjectRes.data.find((s: any) => s.code === 'CHEM' || s.name.toLowerCase().includes('hóa'));
+          const defaultSubId = chemSub ? chemSub.id : subjectRes.data[0].id;
+          setCreateForm((prev) => ({ ...prev, subject_id: defaultSubId }));
+          setQuickSubjectId(defaultSubId);
+          setAiSubjectId(defaultSubId);
         }
       }
     } catch (err) {
